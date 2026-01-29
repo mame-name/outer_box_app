@@ -10,14 +10,14 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-SPAN_N = 3                 # ★ここを調整：何個下の実績と繋ぐか（40個→30個など）
+SPAN_N = 3                 # ★調整：何個下の実績までを「ひとつの塊」として包むか
 AREA_LINE_WIDTH = 2        
 AREA_OPACITY = 0.3         
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
 # ==========================================
 
-# CSS: スタイル調整（サイドバーなどの見た目を整える）
+# CSS: スタイル調整
 st.markdown("""
     <style>
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
@@ -65,7 +65,6 @@ def main():
 
     if uploaded_file:
         try:
-            # --- 1. データクリーニング・前処理 ---
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
@@ -104,41 +103,41 @@ def main():
                         if len(group) < 1: continue
 
                         if plot_mode == "実績を囲む（エリア）":
-                            # --- 2. 新ロジック：N個下の点と直接結んで厚みを作る ---
+                            # 入数ごとに最大・最小を抽出
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
-                            stats = stats.sort_values("入数", ascending=False) # 入数が多い順(40個→10個)
+                            stats = stats.sort_values("入数", ascending=False) # 入数大→小
 
-                            x_coords = []
-                            y_coords = []
+                            env_max_x, env_max_y = [], []
+                            env_min_x, env_min_y = [], []
 
-                            # 右側（最大値）のパス生成：i番目と i+SPAN_N番目を結びながら下りる
+                            # 右側の外郭（最大値ライン）
                             for i in range(len(stats)):
                                 curr = stats.iloc[i]
+                                # 現在からSPAN_N個先までの全実績をカバーする最大値をとる
                                 target_idx = min(i + SPAN_N, len(stats) - 1)
-                                target = stats.iloc[target_idx]
-                                
-                                x_coords.extend([curr['max'], target['max']])
-                                y_coords.extend([curr['入数'], target['入数']])
+                                scope = stats.iloc[i : target_idx + 1]
+                                env_max_x.append(scope['max'].max())
+                                env_max_y.append(curr['入数'])
 
-                            # 左側（最小値）のパス生成：下から上へ戻る
+                            # 左側の外郭（最小値ライン）を逆順（下から上）で作成
                             for i in range(len(stats)-1, -1, -1):
                                 curr = stats.iloc[i]
+                                # 現在からSPAN_N個上までの全実績をカバーする最小値をとる
                                 target_idx = max(i - SPAN_N, 0)
-                                target = stats.iloc[target_idx]
-                                
-                                x_coords.extend([curr['min'], target['min']])
-                                y_coords.extend([curr['入数'], target['入数']])
+                                scope = stats.iloc[target_idx : i + 1]
+                                env_min_x.append(scope['min'].min())
+                                env_min_y.append(curr['入数'])
 
-                            # 完全に閉じる
-                            x_coords.append(x_coords[0])
-                            y_coords.append(y_coords[0])
+                            # パスを結合して閉じる
+                            x_path = env_max_x + env_min_x + [env_max_x[0]]
+                            y_path = env_max_y + env_min_y + [env_max_y[0]]
 
                             fig.add_trace(go.Scatter(
-                                x=x_coords, y=y_coords,
+                                x=x_path, y=y_path,
                                 fill='toself', 
                                 fillcolor=color_map[box_type],
                                 mode='lines',
-                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='hv'),
                                 opacity=AREA_OPACITY,
                                 name=box_type,
                                 hoverinfo='name'
@@ -153,7 +152,6 @@ def main():
                                 hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
-                # --- 3. ターゲット（星）の描画 ---
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
