@@ -82,18 +82,19 @@ def main():
                 df_display = df_base[df_base["外箱"].isin(selected_boxes)].copy()
                 plot_data = df_display[df_display["単一体積"] > 0].copy()
 
-                # グラフ作成（plot_dataが空でもベースの軸だけは作る）
                 fig = go.Figure()
 
-                # 1. 散布図の追加（データがある場合のみ）
+                # 1. 散布図とエリアチャート
                 if not plot_data.empty:
-                    fig = px.scatter(
+                    temp_fig = px.scatter(
                         plot_data, x="単一体積", y="入数", color="外箱",
                         hover_name="製品名",
                         hover_data={"製品コード":True, "単一体積":":.3f", "重量（個）":True, "比重":True, "入数":True, "外箱":True},
                         category_orders={"外箱": available_boxes}
                     )
-                    # エリアチャートの追加
+                    for trace in temp_fig.data:
+                        fig.add_trace(trace)
+
                     for box_type in selected_boxes:
                         group = plot_data[plot_data["外箱"] == box_type]
                         if len(group) >= 3:
@@ -104,7 +105,7 @@ def main():
                                 name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
                             ))
 
-                # 2. ターゲットの追加（ここが独立しているため、チェックを外しても消えません）
+                # 2. ターゲット
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
@@ -117,11 +118,14 @@ def main():
                         ))
                     except: pass
 
-                # レイアウト調整
+                # --- 修正: 0のラインをしっかり見せる設定 ---
                 fig.update_layout(
                     template="plotly_white", height=600,
                     xaxis_title="1個あたりの体積 (重量/比重)",
                     yaxis_title="入数 [個]",
+                    # rangemode="tozero" で常に0を含むようにし、zerolineで線を強調
+                    xaxis=dict(rangemode="tozero", zeroline=True, zerolinewidth=2, zerolinecolor='lightgrey'),
+                    yaxis=dict(rangemode="tozero", zeroline=True, zerolinewidth=2, zerolinecolor='lightgrey'),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
                 
