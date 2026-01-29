@@ -10,8 +10,8 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-AREA_LINE_WIDTH = 0.5      # 線を細くして重ねを綺麗に見せる
-AREA_OPACITY = 0.25         # 重なりで色が濃くなるので少し薄めに設定
+AREA_LINE_WIDTH = 0.5      
+AREA_OPACITY = 0.15         # 面が重なるため、透過を強めにして重なりを綺麗に見せます
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
 # ==========================================
@@ -105,29 +105,34 @@ def main():
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
                             stats = stats.sort_values("入数", ascending=False)
 
-                            # --- 【解決策】ひとつひとつの「帯」を独立した図形として描画 ---
-                            for i in range(len(stats) - 1):
-                                # i番目(今)とi+1番目(1個下)とi+2番目(2個下)のデータを取得
-                                p0 = stats.iloc[i]
-                                p1 = stats.iloc[i+1]
-                                p2 = stats.iloc[i+2] if (i+2) < len(stats) else p1
+                            # 凡例を1回だけ出すためのフラグ
+                            legend_shown = False
 
-                                # 今の点と「1個下」「2個下」を含む四角形パスを作る
-                                # 右側のラインを下りて、左側のラインを上がる
-                                sub_x = [p0['max'], p1['max'], p2['max'], p2['min'], p1['min'], p0['min']]
-                                sub_y = [p0['入数'], p1['入数'], p2['入数'], p2['入数'], p1['入数'], p0['入数']]
+                            for i in range(len(stats)):
+                                p_curr = stats.iloc[i]
+                                
+                                # --- ターゲットとする「n個下」のリスト ---
+                                for dist in [1, 2]: # 1個下、2個下それぞれと面を作る
+                                    if i + dist < len(stats):
+                                        p_target = stats.iloc[i + dist]
+                                        
+                                        # 四角形（または値が同じなら三角形）の4点を結ぶ
+                                        # (今max, ターゲットmax, ターゲットmin, 今min)
+                                        sub_x = [p_curr['max'], p_target['max'], p_target['min'], p_curr['min']]
+                                        sub_y = [p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入数']]
 
-                                fig.add_trace(go.Scatter(
-                                    x=sub_x, y=sub_y,
-                                    fill='toself',
-                                    fillcolor=color_map[box_type],
-                                    mode='lines',
-                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                    opacity=AREA_OPACITY,
-                                    name=box_type,
-                                    showlegend=(i == 0), # 最初だけ凡例に出す
-                                    hoverinfo='skip'
-                                ))
+                                        fig.add_trace(go.Scatter(
+                                            x=sub_x, y=sub_y,
+                                            fill='toself',
+                                            fillcolor=color_map[box_type],
+                                            mode='lines',
+                                            line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                            opacity=AREA_OPACITY,
+                                            name=box_type,
+                                            showlegend=not legend_shown,
+                                            hoverinfo='skip'
+                                        ))
+                                        legend_shown = True
                         else:
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
@@ -138,7 +143,6 @@ def main():
                                 hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
-                # ターゲット
                 if i_weight and i_sg and i_pcs:
                     try:
                         sv, sp = float(i_weight) / float(i_sg), float(i_pcs)
