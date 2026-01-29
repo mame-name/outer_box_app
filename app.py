@@ -18,7 +18,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 def main():
-    # --- サイドバー ---
     with st.sidebar:
         st.subheader("📁 実績データ読込")
         uploaded_file = st.file_uploader("実績XLSMを選択", type=['xlsm'], label_visibility="collapsed")
@@ -41,26 +40,25 @@ def main():
             i_size = input_row("製品サイズ", "巾*長さ")
             calc_submit = st.form_submit_button("シミュレーション実行", use_container_width=True)
 
-    # --- メイン画面 ---
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 外箱サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: gray;'>まるで熊谷さんが考えたような精度で箱のサイズを考えてくれるアプリです</p>", unsafe_allow_html=True)
     st.divider()
 
     if uploaded_file:
         try:
+            # データ読み込み（指定の10列）
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
+            
+            # データ加工
             df_processed = process_product_data(df_raw)
-
-            df_processed['形態'] = df_processed['形態'].astype(str).str.strip()
             df_display = df_processed[df_processed["形態"] == i_type].copy()
 
             if not df_display.empty:
-                st.subheader(f"📈 外箱分布マップ（グループ可視化：{i_type}）")
+                st.subheader(f"📈 外箱分布マップ（{i_type}）")
                 plot_data = df_display[df_display["単一体積"] > 0].copy()
 
-                # 散布図（横軸：単一体積、縦軸：入数）
+                # 1. 散布図作成
                 fig = px.scatter(
                     plot_data, x="単一体積", y="入数", color="外箱",
                     hover_name="製品名",
@@ -69,20 +67,18 @@ def main():
                     labels={"単一体積": "1個あたりの体積 (重量/比重)", "入数": "入数 [個]"}
                 )
 
-                # 箱の種類ごとの領域（塗りつぶし）を追加
+                # 2. 領域の塗りつぶしを追加
                 for box_type in plot_data["外箱"].unique():
                     group = plot_data[plot_data["外箱"] == box_type]
                     if len(group) >= 3:
                         fig.add_trace(go.Scatter(
                             x=group["単一体積"], y=group["入数"],
-                            fill='toself',
-                            fillcolor='rgba(150, 150, 150, 0.1)',
+                            fill='toself', fillcolor='rgba(150, 150, 150, 0.1)',
                             line=dict(width=1, dash='dot', color='gray'),
-                            name=f"{box_type} の範囲",
-                            showlegend=False, hoverinfo='skip'
+                            name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
                         ))
 
-                # シミュレーションターゲット（赤い星）
+                # 3. シミュレーション地点（★印）
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
@@ -91,7 +87,7 @@ def main():
                             x=[sim_unit_vol], y=[sim_pcs],
                             mode='markers',
                             marker=dict(symbol='star', size=22, color='red', line=dict(width=2, color='white')),
-                            name='今回のターゲット'
+                            name='ターゲット'
                         ))
                     except: pass
 
