@@ -3,8 +3,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-import alphashape  # 凹包（いびつな外周）計算用
-from scipy.spatial import ConvexHull  # フォールバック用
 from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
@@ -13,7 +11,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # グラフの表示詳細設定
 # ==========================================
 AREA_LINE_WIDTH = 2        # エリア外周の線幅
-AREA_OPACITY = 0.3         # エリア内の塗りつぶし透明度
+AREA_OPACITY = 0.2         # エリア内の塗りつぶし透明度
 SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
 # ==========================================
 
@@ -71,7 +69,7 @@ def main():
             df_base = df_processed[
                 (df_processed["形態"] == i_type) & 
                 (df_processed["外箱"].notna()) &
-                (df_processed["外箱"].str.strip() != "") &
+                (df_processed["外箱"].str.strip() != "") & 
                 (~df_processed["外箱"].isin(exclude_boxes))
             ].copy()
 
@@ -91,6 +89,7 @@ def main():
 
                 fig = go.Figure()
 
+                # カラーマップ作成
                 colors = px.colors.qualitative.Plotly
                 color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
@@ -98,48 +97,30 @@ def main():
                     for box_type in selected_boxes:
                         group = plot_data[plot_data["外箱"] == box_type]
                         
-                        # 3点以上あれば描画
                         if len(group) >= 3:
+                            # --- 実績点を時計回りにソートするロジック ---
                             points = group[["単一体積", "入数"]].values
-                            try:
-                                # Alpha Shapeを自動計算
-                                alpha_shape = alphashape.alphashape(points)
-                                
-                                # 正常にポリゴンが生成されたかチェック
-                                if hasattr(alpha_shape, 'geom_type') and alpha_shape.geom_type in ['Polygon', 'MultiPolygon']:
-                                    if alpha_shape.geom_type == 'Polygon':
-                                        x_coords, y_coords = alpha_shape.exterior.xy
-                                        fig.add_trace(go.Scatter(
-                                            x=list(x_coords), y=list(y_coords),
-                                            fill='toself', fillcolor=color_map[box_type],
-                                            opacity=AREA_OPACITY,
-                                            line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                            name=box_type, hoverinfo='name'
-                                        ))
-                                    else: # MultiPolygon（複数の塊に分かれた場合）
-                                        for poly in alpha_shape.geoms:
-                                            x_coords, y_coords = poly.exterior.xy
-                                            fig.add_trace(go.Scatter(
-                                                x=list(x_coords), y=list(y_coords),
-                                                fill='toself', fillcolor=color_map[box_type],
-                                                opacity=AREA_OPACITY,
-                                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                                name=box_type, showlegend=False, hoverinfo='skip'
-                                            ))
-                                else:
-                                    # Alpha Shapeが計算できない場合はConvexHull（凸包）で代用
-                                    hull = ConvexHull(points)
-                                    hull_points = points[np.append(hull.vertices, hull.vertices[0])]
-                                    fig.add_trace(go.Scatter(
-                                        x=hull_points[:, 0], y=hull_points[:, 1],
-                                        fill='toself', fillcolor=color_map[box_type],
-                                        opacity=AREA_OPACITY,
-                                        line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                        name=box_type, hoverinfo='name'
-                                    ))
-                            except Exception:
-                                # 計算エラー時は表示をスキップ
-                                pass
+                            # 中心点を計算
+                            center = np.mean(points, axis=0)
+                            # 各点の中心からの角度を計算
+                            angles = np.arctan2(points[:,1] - center[1], points[:,0] - center[0])
+                            # 角度順にソート
+                            sorted_indices = np.argsort(angles)
+                            sorted_points = points[sorted_indices]
+                            # 一周させるために最初の点を末尾に追加
+                            sorted_points = np.vstack([sorted_points, sorted_points[0]])
+
+                            # 線で繋いで塗りつぶす
+                            fig.add_trace(go.Scatter(
+                                x=sorted_points[:, 0], 
+                                y=sorted_points[:, 1],
+                                fill='toself', 
+                                fillcolor=color_map[box_type],
+                                opacity=AREA_OPACITY,
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'), # splineで少し滑らかに
+                                name=box_type,
+                                hoverinfo='name'
+                            ))
 
                 # ターゲットの描画
                 if i_weight and i_sg and i_pcs:
