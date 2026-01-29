@@ -45,33 +45,25 @@ def main():
 
     if uploaded_file:
         try:
+            # 1. 読み込み（A=0, B=1, C=2, D=3, F=5, G=6, I=8, J=9, P=15, AA=26）
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             
-            # 読み込み
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
             
-            # calc.pyの共通処理（製品コードの0埋め、サイズ分解）
+            # 2. calc.pyの共通処理（製品コード0埋め、サイズ分解）
             df_processed = process_product_data(df_raw)
 
-            # --- 厳密な比較のための前処理 ---
-            # 1. 形態の空白除去（Excelのセル内改行やスペース対策）
-            df_processed['形態'] = df_processed['形態'].astype(str).str.strip()
-            
-            # 2. 重量と入数の型をfloatに統一して比較可能にする
+            # 3. 数値として厳密に比較できるよう型を統一
             df_processed["重量（個）"] = pd.to_numeric(df_processed["重量（個）"], errors='coerce')
             df_processed["入数"] = pd.to_numeric(df_processed["入数"], errors='coerce')
+            df_processed['形態'] = df_processed['形態'].astype(str).str.strip()
 
-            # --- フィルタリング実行 ---
+            # 4. フィルタリング実行
             if i_type == "小袋":
                 df_display = df_processed[df_processed["形態"] == "小袋"]
             else:
-                # 形態が一致し、かつ重量と入数が数学的に一致する行
-                df_display = df_processed[
-                    (df_processed["形態"] == i_type) & 
-                    (df_processed["重量（個）"] == df_processed["入_数"]) # ※列名「入数」を厳密に
-                ]
-                # もし列名が「入数」ならこちら
+                # 形態が一致 かつ 重量（個）と入数が厳密に一致
                 df_display = df_processed[
                     (df_processed["形態"] == i_type) & 
                     (df_processed["重量（個）"] == df_processed["入数"])
@@ -79,7 +71,7 @@ def main():
 
             st.subheader(f"📊 実績データ一覧 ({i_type})")
             st.dataframe(df_display, use_container_width=True, height=800)
-            st.info(f"現在のフィルタ: 形態={i_type} / 検索結果: {len(df_display)}件")
+            st.info(f"現在のフィルタ: 形態={i_type} / 表示件数: {len(df_display)}件")
             
         except Exception as e:
             st.error(f"エラー: {e}")
