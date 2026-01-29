@@ -4,7 +4,7 @@ from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
 
-# CSS: サイドバー内の余白詰め、入力欄のプレースホルダー色調整
+# CSS: サイドバー内の余白詰め、プレースホルダー色調整
 st.markdown("""
     <style>
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
@@ -31,19 +31,21 @@ def main():
                 with c2:
                     return st.text_input(label, value="", placeholder=placeholder_text, label_visibility="collapsed")
 
-            # 形態（指定された通り：小袋, パウチ, BIB, スパウト, BIB）
+            # 形態（リスト指定）
             type_list = ["小袋", "パウチ", "BIB", "スパウト", "BIB"]
             c1, c2 = st.columns([1, 2])
             with c1: st.markdown("<div style='padding-top:8px;'>形態</div>", unsafe_allow_html=True)
             with c2: 
                 i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
 
-            i_weight = input_row("重量（個）", "単位：g")
+            # 重量欄のプレースホルダーを「単位：kg」に変更
+            i_weight = input_row("重量（個）", "単位：kg")
             i_pcs = input_row("入数", "単位：個")
             i_sg = input_row("比重", "0.000")
             i_size = input_row("製品サイズ", "巾*長さ")
             
             st.markdown("<div style='padding-top:10px;'></div>", unsafe_allow_html=True)
+            # ボタン押下でフィルタリング等を実行
             calc_submit = st.form_submit_button("シミュレーション実行", use_container_width=True)
 
     # --- メイン画面：スクロールエリア ---
@@ -53,7 +55,6 @@ def main():
 
     if uploaded_file:
         try:
-            # 指定された10列のインデックスと名称
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = [
                 "製品コード", "製品名", "荷姿", "形態", 
@@ -70,13 +71,23 @@ def main():
                 engine='openpyxl'
             )
             
-            # calc.pyのロジックを通す（製品コードの0埋めやサイズ分解）
-            df_final = process_product_data(df_raw)
+            # 基本処理（0埋め、サイズ分解など）
+            df_processed = process_product_data(df_raw)
 
-            st.subheader("📊 実績データ一覧")
-            # 表は加工せず、そのまま全件表示
-            st.dataframe(df_final, use_container_width=True, height=800)
-            st.success(f"読み込み完了: {len(df_final)} 件")
+            # --- フィルタリングロジックの実装 ---
+            if i_type == "小袋":
+                # 小袋なら、形態が「小袋」のものだけを表示
+                df_display = df_processed[df_processed["形態"] == "小袋"]
+            else:
+                # 小袋以外なら、形態が一致し、かつ重量（個）と入数が同じ行だけ表示
+                df_display = df_processed[
+                    (df_processed["形態"] == i_type) & 
+                    (df_processed["重量（個）"] == df_processed["入数"])
+                ]
+
+            st.subheader(f"📊 実績データ一覧 ({i_type})")
+            st.dataframe(df_display, use_container_width=True, height=800)
+            st.success(f"表示件数: {len(df_display)} 件 (全 {len(df_processed)} 件中)")
             
         except Exception as e:
             st.error(f"エラー: {e}")
