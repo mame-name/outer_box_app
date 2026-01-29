@@ -3,15 +3,13 @@ import pandas as pd
 def process_product_data(df):
     df = df.copy()
 
-    # 1. 製品コードを6桁のゼロ埋め文字列に整形
+    # 1. 製品コードを6桁ゼロ埋め（000000）
     def format_code(x):
         if pd.isna(x) or x == "": return ""
         try:
-            # 数値として認識できる場合は整数化してから6桁埋め
             return str(int(float(x))).zfill(6)
         except:
             return str(x).zfill(6)
-
     df['製品コード'] = df['製品コード'].apply(format_code)
 
     # 2. 数値変換
@@ -26,10 +24,9 @@ def process_product_data(df):
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace('nan', '').str.strip()
 
-    # 4. 製品サイズの分解
+    # 4. 製品サイズの分解処理
     df["巾"] = None
     df["長さ"] = None
-
     def split_size(size_str):
         if '*' in size_str:
             parts = size_str.split('*')
@@ -39,8 +36,6 @@ def process_product_data(df):
                 return None, None
         return None, None
 
-    df[['巾', '長さ']] = df.apply(
-        lambda row: pd.Series(split_size(row['製品サイズ'])), axis=1
-    )
+    df[['巾', '長さ']] = df.apply(lambda row: pd.Series(split_size(row['製品サイズ'])), axis=1)
     
     return df
