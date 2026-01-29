@@ -1,15 +1,18 @@
 import pandas as pd
 
 def process_product_data(df):
-    """
-    全データを出力し、製品コードのゼロ埋めとサイズ分解を行う
-    """
     df = df.copy()
 
-    # 1. 製品コードを6桁の文字列として整形（先頭の0を保持）
-    df['製品コード'] = df['製品コード'].apply(
-        lambda x: str(int(float(x))).zfill(6) if pd.notna(x) and str(x).replace('.0','').isdigit() else str(x)
-    )
+    # 1. 製品コードを6桁のゼロ埋め文字列に整形
+    def format_code(x):
+        if pd.isna(x) or x == "": return ""
+        try:
+            # 数値として認識できる場合は整数化してから6桁埋め
+            return str(int(float(x))).zfill(6)
+        except:
+            return str(x).zfill(6)
+
+    df['製品コード'] = df['製品コード'].apply(format_code)
 
     # 2. 数値変換
     num_cols = ['重量（個）', '入数', '重量（箱）', '比重']
@@ -23,7 +26,7 @@ def process_product_data(df):
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace('nan', '').str.strip()
 
-    # 4. 製品サイズの分解処理
+    # 4. 製品サイズの分解
     df["巾"] = None
     df["長さ"] = None
 
