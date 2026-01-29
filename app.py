@@ -27,11 +27,13 @@ def main():
                 with c1: st.markdown(f"<div style='padding-top:8px;'>{label}</div>", unsafe_allow_html=True)
                 with c2: return st.text_input(label, value="", placeholder=placeholder_text, label_visibility="collapsed")
 
+            # 形態リスト（指定通り）
             type_list = ["小袋", "パウチ", "BIB", "スパウト", "BIB"]
             c1, c2 = st.columns([1, 2])
             with c1: st.markdown("<div style='padding-top:8px;'>形態</div>", unsafe_allow_html=True)
             with c2: i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
 
+            # 入力欄（背景ヒント付き）
             i_weight = input_row("重量（個）", "単位：kg")
             i_pcs = input_row("入数", "単位：個")
             i_sg = input_row("比重", "0.000")
@@ -45,33 +47,30 @@ def main():
 
     if uploaded_file:
         try:
-            # 1. 読み込み（A=0, B=1, C=2, D=3, F=5, G=6, I=8, J=9, P=15, AA=26）
+            # 1. 読み込み
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
             
-            # 2. calc.pyの共通処理（製品コード0埋め、サイズ分解）
+            # 2. 基本処理（0埋め、サイズ分解）
             df_processed = process_product_data(df_raw)
 
-            # 3. 数値として厳密に比較できるよう型を統一
-            df_processed["重量（個）"] = pd.to_numeric(df_processed["重量（個）"], errors='coerce')
-            df_processed["入数"] = pd.to_numeric(df_processed["入数"], errors='coerce')
+            # 3. 形態のみでフィルタリング
+            # Excel側の空白などの揺らぎを考慮してstrip処理
             df_processed['形態'] = df_processed['形態'].astype(str).str.strip()
-
-            # 4. フィルタリング実行
-            if i_type == "小袋":
-                df_display = df_processed[df_processed["形態"] == "小袋"]
-            else:
-                # 形態が一致 かつ 重量（個）と入数が厳密に一致
-                df_display = df_processed[
-                    (df_processed["形態"] == i_type) & 
-                    (df_processed["重量（個）"] == df_processed["入数"])
-                ]
+            df_display = df_processed[df_processed["形態"] == i_type]
 
             st.subheader(f"📊 実績データ一覧 ({i_type})")
-            st.dataframe(df_display, use_container_width=True, height=800)
-            st.info(f"現在のフィルタ: 形態={i_type} / 表示件数: {len(df_display)}件")
+            
+            if not df_display.empty:
+                st.dataframe(df_display, use_container_width=True, height=800)
+                st.info(f"表示件数: {len(df_display)}件")
+            else:
+                st.warning(f"「{i_type}」に一致するデータが見つかりませんでした。")
+                # ヒントとして、実際のデータに含まれている形態のリストを表示
+                actual_types = df_processed["形態"].unique()
+                st.write(f"実際のデータに含まれる形態の例: {', '.join(actual_types)}")
             
         except Exception as e:
             st.error(f"エラー: {e}")
