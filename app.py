@@ -56,7 +56,6 @@ def main():
             
             df_processed = process_product_data(df_raw)
             
-            # 全体のベースデータ（除外設定のみ適用）
             exclude_boxes = ["専用", "No,27", "HC21-3"]
             df_base = df_processed[
                 (df_processed["形態"] == i_type) & 
@@ -68,67 +67,64 @@ def main():
             if not df_base.empty:
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
 
-                # 先に表示場所を確保
+                # プレースホルダ
                 plot_spot = st.empty()
                 
                 # チェックボックス配置
                 selected_boxes = []
-                check_cols = st.columns(max(len(available_boxes), 1)) 
+                check_cols = st.columns(len(available_boxes)) 
                 for idx, box in enumerate(available_boxes):
                     with check_cols[idx]:
                         if st.checkbox(box, value=True, key=f"chk_{box}"):
                             selected_boxes.append(box)
 
-                # 表示用データの作成
+                # 表示用データの抽出
                 df_display = df_base[df_base["外箱"].isin(selected_boxes)].copy()
                 plot_data = df_display[df_display["単一体積"] > 0].copy()
 
-                # グラフ初期化（ベースはplot_data、ただし空でも動作するように設定）
-                fig = px.scatter(
-                    plot_data, x="単一体積", y="入数", color="外箱",
-                    hover_name="製品名",
-                    hover_data={"製品コード":True, "単一体積":":.3f", "重量（個）":True, "比重":True, "入数":True, "外箱":True},
-                    template="plotly_white", height=600,
-                    labels={"単一体積": "1個あたりの体積 (重量/比重)", "入数": "入数 [個]"},
-                    category_orders={"外箱": available_boxes}
-                )
+                # グラフ作成（plot_dataが空でもベースの軸だけは作る）
+                fig = go.Figure()
 
-                # エリアチャートの追加
-                for box_type in selected_boxes:
-                    group = plot_data[plot_data["外箱"] == box_type]
-                    if len(group) >= 3:
-                        fig.add_trace(go.Scatter(
-                            x=group["単一体積"], y=group["入数"],
-                            fill='toself', fillcolor='rgba(150, 150, 150, 0.1)',
-                            line=dict(width=1.5, dash='solid', color='rgba(100, 100, 100, 0.3)'),
-                            name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
-                        ))
+                # 1. 散布図の追加（データがある場合のみ）
+                if not plot_data.empty:
+                    fig = px.scatter(
+                        plot_data, x="単一体積", y="入数", color="外箱",
+                        hover_name="製品名",
+                        hover_data={"製品コード":True, "単一体積":":.3f", "重量（個）":True, "比重":True, "入数":True, "外箱":True},
+                        category_orders={"外箱": available_boxes}
+                    )
+                    # エリアチャートの追加
+                    for box_type in selected_boxes:
+                        group = plot_data[plot_data["外箱"] == box_type]
+                        if len(group) >= 3:
+                            fig.add_trace(go.Scatter(
+                                x=group["単一体積"], y=group["入数"],
+                                fill='toself', fillcolor='rgba(150, 150, 150, 0.1)',
+                                line=dict(width=1.5, dash='solid', color='rgba(100, 100, 100, 0.3)'),
+                                name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
+                            ))
 
-                # --- 【重要】ターゲットの計算と表示 ---
-                # plot_dataが空でも（チェックが全部外れても）、ターゲットの値を保持する
+                # 2. ターゲットの追加（ここが独立しているため、チェックを外しても消えません）
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
                         sim_pcs = float(i_pcs)
-                        
-                        # 赤い星印を追加
                         fig.add_trace(go.Scatter(
                             x=[sim_unit_vol], y=[sim_pcs],
                             mode='markers+text',
                             marker=dict(symbol='star', size=25, color='red', line=dict(width=2, color='white')),
                             text=["ターゲット"], textposition="top center", name='ターゲット'
                         ))
+                    except: pass
 
-                        # グラフの表示範囲を決定（データがなくてもターゲットを中心に表示）
-                        # 全体の基準点として df_base（チェックを外す前の全データ）の最大値も参考にする
-                        ref_vol = df_base["単一体積"].max() if not df_base.empty else sim_unit_vol
-                        ref_pcs = df_base["入数"].max() if not df_base.empty else sim_pcs
-                        
-                        fig.update_xaxes(range=[0, max(ref_vol, sim_unit_vol) * 1.1])
-                        fig.update_yaxes(range=[0, max(ref_pcs, sim_pcs) * 1.1])
-                    except:
-                        pass
-
+                # レイアウト調整
+                fig.update_layout(
+                    template="plotly_white", height=600,
+                    xaxis_title="1個あたりの体積 (重量/比重)",
+                    yaxis_title="入数 [個]",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                
                 plot_spot.plotly_chart(fig, use_container_width=True)
 
                 st.divider()
