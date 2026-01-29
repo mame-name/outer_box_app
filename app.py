@@ -12,7 +12,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 AREA_LINE_WIDTH = 1.5      # エリア外周の線幅
 AREA_OPACITY = 0.1         # エリア内の塗りつぶし透明度
 MARKER_SIZE = 8            # 実績データの点サイズ
-SIM_MARKER_SIZE = 15       # ターゲット（星）のサイズ
+SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
 PLOT_OPACITY = 0.8         # 実績データの透明度
 # ==========================================
 
