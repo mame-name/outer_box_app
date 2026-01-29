@@ -118,7 +118,7 @@ def main():
                                         
                                         # 四角形の4点を追加し、Noneで区切る（これがPlotlyで濃淡を出さないコツ）
                                         combined_x.extend([p_curr['min'], p_curr['max'], p_target['max'], p_target['min'], p_curr['min'], None])
-                                        combined_y.extend([p_curr['入数'], p_curr['入数'], p_target['入数'], p_target['入_数'], p_curr['入数'], None])
+                                        combined_y.extend([p_curr['入数'], p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入数'], None])
 
                             fig.add_trace(go.Scatter(
                                 x=combined_x, y=combined_y,
