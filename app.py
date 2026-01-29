@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from scipy.spatial import ConvexHull  # 外周計算用に追加
 import numpy as np
+import alphashape  # 凹包（いびつな外周）計算用
 from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
@@ -12,8 +12,9 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # グラフの表示詳細設定
 # ==========================================
 AREA_LINE_WIDTH = 2        # エリア外周の線幅
-AREA_OPACITY = 0.4         # エリア内の塗りつぶし透明度（少し濃いめに設定）
+AREA_OPACITY = 0.3         # エリア内の塗りつぶし透明度
 SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
+ALPHA_VALUE = 2.0          # ★形状の「攻め具合」。数値が大きいほどデータに密着（いびつ）し、0だと直線的になります。
 # ==========================================
 
 # CSS: スタイル調整
@@ -90,7 +91,6 @@ def main():
 
                 fig = go.Figure()
 
-                # カラーパレットの取得（外箱ごとに一貫した色を割り振るため）
                 colors = px.colors.qualitative.Plotly
                 color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
@@ -98,34 +98,40 @@ def main():
                     for box_type in selected_boxes:
                         group = plot_data[plot_data["外箱"] == box_type]
                         
-                        # 3点以上あれば外周（凸包）を描画
-                        if len(group) >= 3:
+                        # 4点以上ある場合にいびつな外周（Alpha Shape）を計算
+                        if len(group) >= 4:
                             points = group[["単一体積", "入数"]].values
                             try:
-                                hull = ConvexHull(points)
-                                # 閉じた図形にするため、最初の点を最後に加える
-                                hull_indices = np.append(hull.vertices, hull.vertices[0])
-                                hull_points = points[hull_indices]
+                                # Alpha Shapeの計算
+                                alpha_shape = alphashape.alphashape(points, ALPHA_VALUE)
+                                
+                                # 形状がPolygon（単一の閉じた図形）の場合のみ描画
+                                if alpha_shape.geom_type == 'Polygon':
+                                    x_coords, y_coords = alpha_shape.exterior.xy
+                                    fig.add_trace(go.Scatter(
+                                        x=list(x_coords), y=list(y_coords),
+                                        fill='toself', 
+                                        fillcolor=color_map[box_type],
+                                        opacity=AREA_OPACITY,
+                                        line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                        name=box_type,
+                                        hoverinfo='name'
+                                    ))
+                                elif alpha_shape.geom_type == 'MultiPolygon':
+                                    # データが離れすぎている場合に複数の図形に分かれる場合
+                                    for poly in alpha_shape.geoms:
+                                        x_coords, y_coords = poly.exterior.xy
+                                        fig.add_trace(go.Scatter(
+                                            x=list(x_coords), y=list(y_coords),
+                                            fill='toself', fillcolor=color_map[box_type],
+                                            opacity=AREA_OPACITY,
+                                            line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                            name=box_type, showlegend=False, hoverinfo='skip'
+                                        ))
+                            except Exception as e:
+                                pass # 計算不能な場合は描画しない
 
-                                fig.add_trace(go.Scatter(
-                                    x=hull_points[:, 0], 
-                                    y=hull_points[:, 1],
-                                    fill='toself', 
-                                    fillcolor=color_map[box_type],
-                                    # 塗りつぶしの透明度を設定
-                                    opacity=AREA_OPACITY,
-                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                    name=box_type,
-                                    hoverinfo='name'
-                                ))
-                            except:
-                                # データが一直線上に並んでいる場合などはConvexHullがエラーになるためスキップ
-                                pass
-                        
-                        # 2点以下の場合は線や点として表示したい場合はここに追加可能ですが、
-                        # 今回は「外周を囲む」という目的のため、3点以上を対象としています。
-
-                # シミュレーションターゲット（星印）の描画
+                # ターゲットの描画
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
