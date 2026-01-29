@@ -11,7 +11,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # グラフの表示詳細設定
 # ==========================================
 AREA_LINE_WIDTH = 0.5      
-AREA_OPACITY = 0.4         # 異なる箱同士の重なり用
+AREA_OPACITY = 0.4         # 異なる箱同士が重なった際の識別用
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
 # ==========================================
@@ -98,7 +98,6 @@ def main():
 
                 if not plot_data.empty:
                     if plot_mode == "実績を囲む（エリア）":
-                        # 同じ箱の複数の四角形を「1つのパス」として結合することで、重なりの濃淡を防ぐ
                         for box_type in selected_boxes:
                             group = plot_data[plot_data["外箱"] == box_type]
                             if len(group) < 1: continue
@@ -109,14 +108,14 @@ def main():
                             combined_x = []
                             combined_y = []
 
-                            # 1個下、2個下、それぞれのペアを結ぶ四角形を生成
                             for i in range(len(stats)):
                                 p_curr = stats.iloc[i]
-                                for dist in [1, 2]:
+                                # 1個下、2個下、3個下すべてと面を作る
+                                for dist in [1, 2, 3]:
                                     if i + dist < len(stats):
                                         p_target = stats.iloc[i + dist]
                                         
-                                        # 四角形の4点を追加し、Noneで区切る（これがPlotlyで濃淡を出さないコツ）
+                                        # 四角形を構築してNoneで区切る
                                         combined_x.extend([p_curr['min'], p_curr['max'], p_target['max'], p_target['min'], p_curr['min'], None])
                                         combined_y.extend([p_curr['入数'], p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入数'], None])
 
