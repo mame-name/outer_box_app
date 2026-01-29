@@ -3,5 +3,3 @@ pandas
 openpyxl
 plotly
 statsmodels
-alphashape
-shapely
