@@ -6,6 +6,16 @@ from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
 
+# ==========================================
+# グラフの表示詳細設定
+# ==========================================
+AREA_LINE_WIDTH = 1.5      # エリア外周の線幅
+AREA_OPACITY = 0.1         # エリア内の塗りつぶし透明度
+MARKER_SIZE = 8            # 実績データの点サイズ
+SIM_MARKER_SIZE = 25       # ターゲット（星）のサイズ
+PLOT_OPACITY = 0.8         # 実績データの透明度
+# ==========================================
+
 # CSS: スタイル調整
 st.markdown("""
     <style>
@@ -66,11 +76,8 @@ def main():
 
             if not df_base.empty:
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
-
-                # プレースホルダ
                 plot_spot = st.empty()
                 
-                # チェックボックス配置
                 selected_boxes = []
                 check_cols = st.columns(len(available_boxes)) 
                 for idx, box in enumerate(available_boxes):
@@ -78,20 +85,20 @@ def main():
                         if st.checkbox(box, value=True, key=f"chk_{box}"):
                             selected_boxes.append(box)
 
-                # 表示用データの抽出
                 df_display = df_base[df_base["外箱"].isin(selected_boxes)].copy()
                 plot_data = df_display[df_display["単一体積"] > 0].copy()
 
                 fig = go.Figure()
 
-                # 1. 散布図とエリアチャート
                 if not plot_data.empty:
                     temp_fig = px.scatter(
                         plot_data, x="単一体積", y="入数", color="外箱",
                         hover_name="製品名",
                         hover_data={"製品コード":True, "単一体積":":.3f", "重量（個）":True, "比重":True, "入数":True, "外箱":True},
-                        category_orders={"外箱": available_boxes}
+                        category_orders={"外箱": available_boxes},
+                        opacity=PLOT_OPACITY
                     )
+                    temp_fig.update_traces(marker=dict(size=MARKER_SIZE))
                     for trace in temp_fig.data:
                         fig.add_trace(trace)
 
@@ -100,30 +107,29 @@ def main():
                         if len(group) >= 3:
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
-                                fill='toself', fillcolor='rgba(150, 150, 150, 0.1)',
-                                line=dict(width=1.5, dash='solid', color='rgba(100, 100, 100, 0.3)'),
+                                fill='toself', 
+                                fillcolor=f'rgba(150, 150, 150, {AREA_OPACITY})',
+                                line=dict(width=AREA_LINE_WIDTH, dash='solid', color='rgba(100, 100, 100, 0.3)'),
                                 name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
                             ))
 
-                # 2. ターゲット
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
                         sim_pcs = float(i_pcs)
+                        # ターゲットの追加（modeから'text'を除去し、text引数を削除）
                         fig.add_trace(go.Scatter(
                             x=[sim_unit_vol], y=[sim_pcs],
-                            mode='markers+text',
-                            marker=dict(symbol='star', size=25, color='red', line=dict(width=2, color='white')),
-                            text=["ターゲット"], textposition="top center", name='ターゲット'
+                            mode='markers',
+                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', line=dict(width=2, color='white')),
+                            name='ターゲット'
                         ))
                     except: pass
 
-                # --- 修正: 0のラインをしっかり見せる設定 ---
                 fig.update_layout(
                     template="plotly_white", height=600,
                     xaxis_title="1個あたりの体積 (重量/比重)",
                     yaxis_title="入数 [個]",
-                    # rangemode="tozero" で常に0を含むようにし、zerolineで線を強調
                     xaxis=dict(rangemode="tozero", zeroline=True, zerolinewidth=2, zerolinecolor='lightgrey'),
                     yaxis=dict(rangemode="tozero", zeroline=True, zerolinewidth=2, zerolinecolor='lightgrey'),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
