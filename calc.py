@@ -3,7 +3,7 @@ import pandas as pd
 def process_product_data(df):
     df = df.copy()
 
-    # 1. 製品コードを6桁ゼロ埋め（000000）
+    # 1. 製品コード 000000 形式
     def format_code(x):
         if pd.isna(x) or x == "": return ""
         try:
@@ -18,15 +18,20 @@ def process_product_data(df):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # 3. 文字列クリーニング
+    # 3. 体積列の作成 (重量 / 比重 * 入数)
+    # 比重がNaNや0の場合は計算できないため、fill系ではなく条件付きで計算
+    df['体積'] = df.apply(
+        lambda x: (x['重量（個）'] / x['比重'] * x['入数']) if x['比重'] > 0 else 0, 
+        axis=1
+    )
+
+    # 4. 文字列クリーニング
     str_cols = ['製品名', '荷姿', '形態', '外箱', '製品サイズ']
     for col in str_cols:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace('nan', '').str.strip()
 
-    # 4. 製品サイズの分解処理
-    df["巾"] = None
-    df["長さ"] = None
+    # 5. 製品サイズの分解
     def split_size(size_str):
         if '*' in size_str:
             parts = size_str.split('*')
