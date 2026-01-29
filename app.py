@@ -12,6 +12,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 AREA_LINE_WIDTH = 2        # エリア外周の線幅
 AREA_OPACITY = 0.2         # エリア内の塗りつぶし透明度
+MARKER_SIZE = 8            # プロットパターンの点サイズ
 SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
 # ==========================================
 
@@ -31,6 +32,11 @@ def main():
     with st.sidebar:
         st.subheader("📁 実績データ読込")
         uploaded_file = st.file_uploader("実績XLSMを選択", type=['xlsm'], label_visibility="collapsed")
+        st.divider()
+
+        st.subheader("📊 表示設定")
+        # 表示切替ボタン
+        plot_mode = st.radio("表示パターン", ["実績を囲む（エリア）", "全てのプロット（点）"], index=0)
         st.divider()
 
         st.subheader("🔍 1. 形態選択")
@@ -88,41 +94,43 @@ def main():
                 plot_data = df_display[df_display["単一体積"] > 0].copy()
 
                 fig = go.Figure()
-
-                # カラーマップ作成
                 colors = px.colors.qualitative.Plotly
                 color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
                 if not plot_data.empty:
-                    for box_type in selected_boxes:
-                        group = plot_data[plot_data["外箱"] == box_type]
-                        
-                        if len(group) >= 3:
-                            # --- 実績点を時計回りにソートするロジック ---
-                            points = group[["単一体積", "入数"]].values
-                            # 中心点を計算
-                            center = np.mean(points, axis=0)
-                            # 各点の中心からの角度を計算
-                            angles = np.arctan2(points[:,1] - center[1], points[:,0] - center[0])
-                            # 角度順にソート
-                            sorted_indices = np.argsort(angles)
-                            sorted_points = points[sorted_indices]
-                            # 一周させるために最初の点を末尾に追加
-                            sorted_points = np.vstack([sorted_points, sorted_points[0]])
+                    if plot_mode == "実績を囲む（エリア）":
+                        # エリア表示モード
+                        for box_type in selected_boxes:
+                            group = plot_data[plot_data["外箱"] == box_type]
+                            if len(group) >= 3:
+                                points = group[["単一体積", "入数"]].values
+                                center = np.mean(points, axis=0)
+                                angles = np.arctan2(points[:,1] - center[1], points[:,0] - center[0])
+                                sorted_indices = np.argsort(angles)
+                                sorted_points = points[sorted_indices]
+                                sorted_points = np.vstack([sorted_points, sorted_points[0]])
 
-                            # 線で繋いで塗りつぶす
+                                fig.add_trace(go.Scatter(
+                                    x=sorted_points[:, 0], y=sorted_points[:, 1],
+                                    fill='toself', fillcolor=color_map[box_type],
+                                    opacity=AREA_OPACITY,
+                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'),
+                                    name=box_type, hoverinfo='name'
+                                ))
+                    else:
+                        # 全プロット表示モード（元々のpx.scatterに近い形）
+                        for box_type in selected_boxes:
+                            group = plot_data[plot_data["外箱"] == box_type]
                             fig.add_trace(go.Scatter(
-                                x=sorted_points[:, 0], 
-                                y=sorted_points[:, 1],
-                                fill='toself', 
-                                fillcolor=color_map[box_type],
-                                opacity=AREA_OPACITY,
-                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'), # splineで少し滑らかに
+                                x=group["単一体積"], y=group["入数"],
+                                mode='markers',
+                                marker=dict(size=MARKER_SIZE, color=color_map[box_type]),
                                 name=box_type,
-                                hoverinfo='name'
+                                text=group["製品名"],
+                                hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
-                # ターゲットの描画
+                # ターゲット（星）の描画
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
