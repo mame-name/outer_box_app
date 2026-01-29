@@ -10,8 +10,8 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-SPAN_N = 3                 # ★調整：何個下の実績と繋ぐか（40個→30個など）
-AREA_LINE_WIDTH = 1.5      
+SPAN_N = 3                 # ★1〜3個下のすべてと繋いで範囲を埋めます
+AREA_LINE_WIDTH = 1.0      
 AREA_OPACITY = 0.3         
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
@@ -103,33 +103,33 @@ def main():
                         if len(group) < 1: continue
 
                         if plot_mode == "実績を囲む（エリア）":
-                            # 入数ごとに最大・最小を算出
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
                             stats = stats.sort_values("入数", ascending=False) # 入数大→小
 
-                            # 座標リストの作成
                             right_x, right_y = [], []
                             left_x, left_y = [], []
 
-                            # 右側のライン（最大体積を繋ぐ）
+                            # --- 改良：1からSPAN_N個下までのすべての点と結ぶ ---
+                            # 右側の壁
                             for i in range(len(stats)):
                                 curr = stats.iloc[i]
-                                target_idx = min(i + SPAN_N, len(stats) - 1)
-                                target = stats.iloc[target_idx]
-                                # 「今」と「N個下」を交互に追加して線を繋ぐ
-                                right_x.extend([curr['max'], target['max']])
-                                right_y.extend([curr['入数'], target['入数']])
+                                for n in range(1, SPAN_N + 1):
+                                    target_idx = i + n
+                                    if target_idx < len(stats):
+                                        target = stats.iloc[target_idx]
+                                        right_x.extend([curr['max'], target['max']])
+                                        right_y.extend([curr['入数'], target['入数']])
 
-                            # 左側のライン（最小体積を繋ぐ：逆順で戻る）
+                            # 左側の壁（逆順）
                             for i in range(len(stats)-1, -1, -1):
                                 curr = stats.iloc[i]
-                                target_idx = max(i - SPAN_N, 0)
-                                target = stats.iloc[target_idx]
-                                # 「今」と「N個上」を交互に追加して線を繋ぐ
-                                left_x.extend([curr['min'], target['min']])
-                                left_y.extend([curr['入数'], target['入数']])
+                                for n in range(1, SPAN_N + 1):
+                                    target_idx = i - n
+                                    if target_idx >= 0:
+                                        target = stats.iloc[target_idx]
+                                        left_x.extend([curr['min'], target['min']])
+                                        left_y.extend([curr['入_数'], target['入数']])
 
-                            # パスの結合（右を下りてから左を上る）
                             full_x = right_x + left_x + [right_x[0]]
                             full_y = right_y + left_y + [right_y[0]]
 
@@ -138,7 +138,7 @@ def main():
                                 fill='toself', 
                                 fillcolor=color_map[box_type],
                                 mode='lines',
-                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
                                 opacity=AREA_OPACITY,
                                 name=box_type,
                                 hoverinfo='skip'
