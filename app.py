@@ -99,27 +99,27 @@ def main():
                 if not plot_data.empty:
                     if plot_mode == "実績を囲む（エリア）":
                         for box_type in selected_boxes:
-                            group = plot_data[plot_data["外箱"] == box_type]
+                            group = plot_data[plot_data["外箱"] == box_type].sort_values("単一体積")
                             if len(group) >= 2:
-                                # 【新ロジック】体積ごとに最大・最小を抽出して縁（ふち）を作る
-                                # 同じ体積のデータがある場合に備えて集約
+                                # 体積ごとの最大・最小を抽出
                                 upper_edge = group.groupby("単一体積")["入数"].max().reset_index()
                                 lower_edge = group.groupby("単一体積")["入数"].min().reset_index()
                                 
-                                # 上端を左→右へ、下端を右→左へ繋ぐことで一周させる
-                                x_path = list(upper_edge["単一体積"]) + list(lower_edge["単一体積"])[::-1]
-                                y_path = list(upper_edge["入数"]) + list(lower_edge["入数"])[::-1]
+                                # 時計回りに点を結合（上端を右へ、下端を左へ戻る）
+                                x_coords = list(upper_edge["単一体積"]) + list(lower_edge["単一体積"])[::-1]
+                                y_coords = list(upper_edge["入数"]) + list(lower_edge["入数"])[::-1]
                                 
-                                # 最初の点に戻って閉じる
-                                x_path.append(x_path[0])
-                                y_path.append(y_path[0])
-
+                                # 塗りつぶしを有効化（modeを'lines'に限定せずfillを指定）
                                 fig.add_trace(go.Scatter(
-                                    x=x_path, y=y_path,
-                                    fill='toself', fillcolor=color_map[box_type],
+                                    x=x_coords, 
+                                    y=y_coords,
+                                    fill='toself', 
+                                    fillcolor=color_map[box_type],
+                                    mode='lines',
+                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
                                     opacity=AREA_OPACITY,
-                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
-                                    name=box_type, hoverinfo='name'
+                                    name=box_type,
+                                    hoverinfo='name'
                                 ))
                     else:
                         for box_type in selected_boxes:
@@ -169,4 +169,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
