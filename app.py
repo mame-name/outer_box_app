@@ -10,8 +10,8 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-AREA_LINE_WIDTH = 0.5      
-AREA_OPACITY = 0.15         # 面が重なるため、透過を強めにして重なりを綺麗に見せます
+AREA_LINE_WIDTH = 0        # 境界線は消して面を滑らかに
+AREA_OPACITY = 0.4         # 違う箱同士が重なった時に識別できる透明度
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
 # ==========================================
@@ -97,52 +97,57 @@ def main():
                 color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
                 if not plot_data.empty:
-                    for box_type in selected_boxes:
-                        group = plot_data[plot_data["外箱"] == box_type]
-                        if len(group) < 1: continue
+                    if plot_mode == "実績を囲む（エリア）":
+                        # --- 背景シェイプとして描画する方式 ---
+                        shapes = []
+                        for box_type in selected_boxes:
+                            group = plot_data[plot_data["外箱"] == box_type]
+                            if len(group) < 1: continue
 
-                        if plot_mode == "実績を囲む（エリア）":
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
                             stats = stats.sort_values("入数", ascending=False)
 
-                            # 凡例を1回だけ出すためのフラグ
-                            legend_shown = False
-
+                            # 各点について「1個下」「2個下」との面を作成
                             for i in range(len(stats)):
                                 p_curr = stats.iloc[i]
-                                
-                                # --- ターゲットとする「n個下」のリスト ---
-                                for dist in [1, 2]: # 1個下、2個下それぞれと面を作る
+                                for dist in [1, 2]:
                                     if i + dist < len(stats):
                                         p_target = stats.iloc[i + dist]
                                         
-                                        # 四角形（または値が同じなら三角形）の4点を結ぶ
-                                        # (今max, ターゲットmax, ターゲットmin, 今min)
-                                        sub_x = [p_curr['max'], p_target['max'], p_target['min'], p_curr['min']]
-                                        sub_y = [p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入数']]
-
-                                        fig.add_trace(go.Scatter(
-                                            x=sub_x, y=sub_y,
-                                            fill='toself',
+                                        # 四角形のパス文字列を生成 (L: Line to, Z: Close path)
+                                        path = f"M {p_curr['min']},{p_curr['入数']} L {p_curr['max']},{p_curr['入数']} " \
+                                               f"L {p_target['max']},{p_target['入数']} L {p_target['min']},{p_target['入数']} Z"
+                                        
+                                        shapes.append(dict(
+                                            type="path", path=path,
                                             fillcolor=color_map[box_type],
-                                            mode='lines',
-                                            line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                            line=dict(width=0),
                                             opacity=AREA_OPACITY,
-                                            name=box_type,
-                                            showlegend=not legend_shown,
-                                            hoverinfo='skip'
+                                            layer="below"
                                         ))
-                                        legend_shown = True
-                        else:
+                            
+                            # 凡例表示用に空のScatterを1つ追加
+                            fig.add_trace(go.Scatter(
+                                x=[None], y=[None], mode='markers',
+                                marker=dict(size=10, color=color_map[box_type], symbol='square'),
+                                name=box_type
+                            ))
+                        fig.update_layout(shapes=shapes)
+
+                    else:
+                        # 全てのプロット（点）モード
+                        for box_type in selected_boxes:
+                            group = plot_data[plot_data["外箱"] == box_type]
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
                                 mode='markers',
                                 marker=dict(size=MARKER_SIZE, color=color_map[box_type]),
                                 name=box_type,
                                 text=group["製品名"],
-                                hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
+                                hovertemplate="<b>%{text}</b><br>体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
+                # ターゲット
                 if i_weight and i_sg and i_pcs:
                     try:
                         sv, sp = float(i_weight) / float(i_sg), float(i_pcs)
