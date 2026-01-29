@@ -8,12 +8,13 @@ from calc import process_product_data
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
 
 # ==========================================
-# グラフの表示詳細設定
+# グラフの表示詳細設定（ここを調整してください）
 # ==========================================
-AREA_LINE_WIDTH = 2        
-AREA_OPACITY = 0.3         
-MARKER_SIZE = 8            
-SIM_MARKER_SIZE = 18       
+SPAN_N = 3                 # 何個下の入数（実績）と結合してエリアを作るか
+AREA_LINE_WIDTH = 2        # エリア外周の線幅
+AREA_OPACITY = 0.3         # エリア内の塗りつぶし透明度
+MARKER_SIZE = 8            # 点表示モードのサイズ
+SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
 # ==========================================
 
 # CSS: スタイル調整
@@ -36,13 +37,6 @@ def main():
 
         st.subheader("📊 表示設定")
         plot_mode = st.radio("表示パターン", ["実績を囲む（エリア）", "全てのプロット（点）"], index=0)
-        
-        # --- 追加：エリアの接続スパン調整 ---
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("📐 エリアの厚み調整")
-        span_n = st.slider("接続スパン（N個下の入数と結合）", min_value=1, max_value=10, value=3)
-        st.info(f"現在の設定：各入数の実績を、{span_n}つ下の入数の実績と繋いでエリアを作ります。")
-        
         st.divider()
 
         st.subheader("🔍 1. 形態選択")
@@ -71,7 +65,7 @@ def main():
 
     if uploaded_file:
         try:
-            # データ読込とクリーニング
+            # データ読込・クリーニング
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
@@ -110,29 +104,29 @@ def main():
                         if len(group) < 1: continue
 
                         if plot_mode == "実績を囲む（エリア）":
-                            # 【改良ロジック】N個下の入数と最大・最小を繋ぐ
+                            # 入数ごとにxの最小・最大を抽出
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
-                            stats = stats.sort_values("入数", ascending=False) # 入数が多い順
+                            stats = stats.sort_values("入_数", ascending=False) # 入数が多い順
                             
                             x_path = []
                             y_path = []
 
-                            # 右端（最大体積）を上から下へ辿る
+                            # 右側の縁（最大体積側）を下へ辿る
                             for i in range(len(stats)):
                                 curr = stats.iloc[i]
+                                next_idx = i + SPAN_N if i + SPAN_N < len(stats) else len(stats) - 1
+                                target_next = stats.iloc[next_idx]
+                                
                                 x_path.append(curr['max'])
                                 y_path.append(curr['入数'])
-                                # N個下の実績があれば、その入数まで垂直に繋ぐ（階段状にするため）
-                                next_idx = i + span_n if i + span_n < len(stats) else len(stats) - 1
-                                target_next = stats.iloc[next_idx]
+                                # 垂直に繋いでから次の点へ（階段状）
                                 x_path.append(curr['max'])
                                 y_path.append(target_next['入数'])
 
-                            # 左端（最小体積）を下から上へ戻る
+                            # 左側の縁（最小体積側）を上へ戻る
                             for i in range(len(stats)-1, -1, -1):
                                 curr = stats.iloc[i]
-                                # N個上の実績（戻りなので上方向）
-                                prev_idx = i - span_n if i - span_n >= 0 else 0
+                                prev_idx = i - SPAN_N if i - SPAN_N >= 0 else 0
                                 target_prev = stats.iloc[prev_idx]
                                 
                                 x_path.append(curr['min'])
@@ -145,7 +139,7 @@ def main():
                                 fill='toself', 
                                 fillcolor=color_map[box_type],
                                 mode='lines',
-                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
                                 opacity=AREA_OPACITY,
                                 name=box_type,
                                 hoverinfo='name'
@@ -163,15 +157,10 @@ def main():
                 # ターゲット描画
                 if i_weight and i_sg and i_pcs:
                     try:
-                        sim_unit_vol = float(i_weight) / float(i_sg)
-                        sim_pcs = float(i_pcs)
-                        fig.add_trace(go.Scatter(
-                            x=[sim_unit_vol], y=[sim_pcs],
-                            mode='markers',
-                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', 
-                                        line=dict(width=2, color='white')),
-                            name='ターゲット'
-                        ))
+                        sv, sp = float(i_weight)/float(i_sg), float(i_pcs)
+                        fig.add_trace(go.Scatter(x=[sv], y=[sp], mode='markers',
+                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', line=dict(width=2, color='white')),
+                            name='ターゲット'))
                     except: pass
 
                 fig.update_layout(
