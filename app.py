@@ -10,6 +10,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
+SPAN_N = 3                 # ★調整項目：何個下の入数（実績）と結合するか
 AREA_LINE_WIDTH = 2        
 AREA_OPACITY = 0.3         
 MARKER_SIZE = 8            
@@ -64,15 +65,13 @@ def main():
 
     if uploaded_file:
         try:
-            # --- 1. データクリーニング・前処理の復活 ---
+            # --- 1. データクリーニング・前処理 ---
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
             
-            # 外部ファイルの処理ロジックを適用
             df_processed = process_product_data(df_raw)
             
-            # 特定の箱や不正データの除外
             exclude_boxes = ["専用", "No,27", "HC21-3"]
             df_base = df_processed[
                 (df_processed["形態"] == i_type) & 
@@ -85,7 +84,6 @@ def main():
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
                 plot_spot = st.empty()
                 
-                # 箱選択チェックボックスの生成
                 selected_boxes = []
                 check_cols = st.columns(len(available_boxes)) 
                 for idx, box in enumerate(available_boxes):
@@ -106,31 +104,54 @@ def main():
                         if len(group) < 1: continue
 
                         if plot_mode == "実績を囲む（エリア）":
-                            # --- 2. 考案いただいた新ロジック：入数ごとの左右端を繋ぐ ---
-                            # 入数ごとにxの最小・最大を抽出
+                            # --- 2. 各個数の最大・最小を把握し、N個下と繋ぐ新ロジック ---
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
-                            stats = stats.sort_values("入数") # 入数が少ない順に並べる
+                            # 入数（y）の大きい順（上から下へ）に並べる
+                            stats = stats.sort_values("入数", ascending=False)
 
-                            # 右側の縁（下から上へ）＋ 左側の縁（上から下へ戻る）
-                            x_coords = stats['max'].tolist() + stats['min'].tolist()[::-1]
-                            y_coords = stats['入数'].tolist() + stats['入数'].tolist()[::-1]
-                            
-                            # 完全に図形を閉じる
-                            x_coords.append(x_coords[0])
-                            y_coords.append(y_coords[0])
+                            x_path = []
+                            y_path = []
+
+                            # 【右側の縁：最大値側】 上から下へ
+                            for i in range(len(stats)):
+                                curr = stats.iloc[i]
+                                # 現在の点を追加
+                                x_path.append(curr['max'])
+                                y_path.append(curr['入数'])
+                                
+                                # SPAN_N個下のデータがあれば、そこまで垂直に線を下ろす
+                                next_idx = i + SPAN_N if i + SPAN_N < len(stats) else len(stats) - 1
+                                target_next = stats.iloc[next_idx]
+                                x_path.append(curr['max'])
+                                y_path.append(target_next['入数'])
+
+                            # 【左側の縁：最小値側】 下から上へ戻る
+                            for i in range(len(stats)-1, -1, -1):
+                                curr = stats.iloc[i]
+                                # SPAN_N個上のデータがあれば、そこまで垂直に線を上げる
+                                prev_idx = i - SPAN_N if i - SPAN_N >= 0 else 0
+                                target_prev = stats.iloc[prev_idx]
+                                
+                                x_path.append(curr['min'])
+                                y_path.append(curr['入数'])
+                                x_path.append(curr['min'])
+                                y_path.append(target_prev['入数'])
+
+                            # 完全に閉じる
+                            x_path.append(x_path[0])
+                            y_path.append(y_path[0])
 
                             fig.add_trace(go.Scatter(
-                                x=x_coords, y=y_coords,
+                                x=x_path, y=y_path,
                                 fill='toself', 
                                 fillcolor=color_map[box_type],
                                 mode='lines',
-                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
                                 opacity=AREA_OPACITY,
                                 name=box_type,
                                 hoverinfo='name'
                             ))
                         else:
-                            # 点表示モード（ホバー情報あり）
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
                                 mode='markers',
