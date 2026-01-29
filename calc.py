@@ -2,50 +2,30 @@ import pandas as pd
 import numpy as np
 
 def process_product_data(df):
+    """
+    指定された10列をベースにデータ清掃と基本計算を行う
+    """
     df = df.copy()
 
-    # 1. 型変換
+    # 1. 型変換（数値列）
+    # F:重量, G:入数, J:比重 は数値として扱う
+    num_cols = ['重量', '入数', '比重']
+    for col in num_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # 2. 型変換（文字列・クリーニング）
+    # P:製品サイズ, AB:シール をクリーニング
     df['製品サイズ'] = df['製品サイズ'].astype(str).str.strip()
-    df['重量'] = pd.to_numeric(df['重量'], errors='coerce')
-    df['比重'] = pd.to_numeric(df['比重'], errors='coerce')
-    df['入数'] = pd.to_numeric(df['入数'], errors='coerce')
     df['シール'] = df['シール'].astype(str).str.strip()
+    df['充填機'] = df['充填機'].astype(str).str.strip()
 
-    # 2. 必須データの欠損除外
+    # 3. サイズ未入力行の除外
     df = df[~df['製品サイズ'].isin(['nan', 'None', ''])]
-    df = df.dropna(subset=['重量', '比重'])
-    df = df[df['重量'] > 0]
-
-    # 3. 巾・長さ分解
+    
+    # 4. 巾・長さの分離 (P列: 製品サイズ "100*150" 等を想定)
     size_split = df["製品サイズ"].str.split('*', n=1, expand=True)
     df["巾"] = pd.to_numeric(size_split[0], errors='coerce')
     df["長さ"] = pd.to_numeric(size_split[1], errors='coerce')
-    
-    # 4. 面積計算 (ビン口: L-24+40 / フラット: L-15)
-    def calculate_area(row):
-        m, w, l, s = str(row["充填機"]), row["巾"], row["長さ"], str(row["シール"])
-        if pd.isna(w) or pd.isna(l): return None
-        adj_w = (w - 10) if "FR" in m else (w - 8)
 
-        if "フラット" in s:
-            area = adj_w * (l - 15)
-        elif "ビン口" in s:
-            area = (adj_w * (l - 24)) + 40
-        else:
-            area = adj_w * l
-        return area
-
-    df["面積"] = df.apply(calculate_area, axis=1)
-    df["体積"] = df["重量"] / df["比重"]
-    
-    # 5. 高さ計算
-    def calculate_height(row):
-        v, a = row["体積"], row["面積"]
-        if pd.isna(v) or pd.isna(a) or a <= 0: return None
-        return (v / a) * 1000000 * 1.9
-    
-    df["高さ"] = df.apply(calculate_height, axis=1)
-    df["上限高"] = df["高さ"] * (1 + 1/9)
-    df["下限高"] = df["高さ"] * (1 - 1/7)
-    
+    # 一旦、計算ロジックを入れる前の「綺麗な10列+α」の状態を返します
     return df
