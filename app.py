@@ -67,15 +67,22 @@ def main():
                     labels={"単一体積": "1個あたりの体積 (重量/比重)", "入数": "入数 [個]"}
                 )
 
-                # 2. 領域の塗りつぶしを追加
+                # 2. 領域の塗りつぶしを追加（★点線から実線・エリアチャート形式へ変更）
                 for box_type in plot_data["外箱"].unique():
                     group = plot_data[plot_data["外箱"] == box_type]
                     if len(group) >= 3:
                         fig.add_trace(go.Scatter(
                             x=group["単一体積"], y=group["入数"],
-                            fill='toself', fillcolor='rgba(150, 150, 150, 0.1)',
-                            line=dict(width=1, dash='dot', color='gray'),
-                            name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
+                            fill='toself', 
+                            fillcolor='rgba(150, 150, 150, 0.15)', # 塗りつぶしの不透明度を調整
+                            line=dict(
+                                width=1.5, 
+                                dash='solid', # ←点線(dot)を実線(solid)に変更
+                                color='rgba(100, 100, 100, 0.4)' # 境界を柔らかい実線に
+                            ),
+                            name=f"{box_type} の範囲", 
+                            showlegend=False, 
+                            hoverinfo='skip'
                         ))
 
                 # 3. シミュレーション地点（★印）
