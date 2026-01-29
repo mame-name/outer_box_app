@@ -105,31 +105,44 @@ def main():
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
                             stats = stats.sort_values("入数", ascending=False) # 入数大→小
 
-                            # パスを格納するリスト
                             full_x = []
                             full_y = []
 
-                            # 1. 右側の壁（最大値）：上から下へ「1個下」と結びながら進む
+                            # 1. 右側の壁（最大値）：1個下、および2個下と結ぶ
                             for i in range(len(stats)):
                                 curr = stats.iloc[i]
                                 full_x.append(curr['max'])
                                 full_y.append(curr['入数'])
-                                # 1個下があれば、そこまでの垂直・斜め線を繋ぐ
+                                
+                                # 1個下との接続
                                 if i + 1 < len(stats):
-                                    next_p = stats.iloc[i + 1]
-                                    full_x.append(next_p['max'])
-                                    full_y.append(next_p['入数'])
+                                    t1 = stats.iloc[i + 1]
+                                    full_x.extend([curr['max'], t1['max']])
+                                    full_y.extend([curr['入数'], t1['入数']])
+                                
+                                # 2個下との接続（追加分）
+                                if i + 2 < len(stats):
+                                    t2 = stats.iloc[i + 2]
+                                    full_x.extend([curr['max'], t2['max']])
+                                    full_y.extend([curr['入数'], t2['入数']])
 
-                            # 2. 左側の壁（最小値）：下から上へ「1個上」と結びながら戻る
+                            # 2. 左側の壁（最小値）：逆順で1個上、2個上と結ぶ
                             for i in range(len(stats)-1, -1, -1):
                                 curr = stats.iloc[i]
                                 full_x.append(curr['min'])
                                 full_y.append(curr['入数'])
-                                # 1個上があれば、そこまでの線を繋ぐ
+                                
+                                # 1個上との接続
                                 if i - 1 >= 0:
-                                    prev_p = stats.iloc[i - 1]
-                                    full_x.append(prev_p['min'])
-                                    full_y.append(prev_p['入数'])
+                                    t1 = stats.iloc[i - 1]
+                                    full_x.extend([curr['min'], t1['min']])
+                                    full_y.extend([curr['入数'], t1['入数']])
+                                
+                                # 2個上との接続（追加分）
+                                if i - 2 >= 0:
+                                    t2 = stats.iloc[i - 2]
+                                    full_x.extend([curr['min'], t2['min']])
+                                    full_y.extend([curr['入数'], t2['入数']])
 
                             # 完全に閉じる
                             full_x.append(full_x[0])
@@ -155,7 +168,6 @@ def main():
                                 hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
-                # --- ターゲット（星） ---
                 if i_weight and i_sg and i_pcs:
                     try:
                         sv, sp = float(i_weight) / float(i_sg), float(i_pcs)
