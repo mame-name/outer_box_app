@@ -106,7 +106,7 @@ def main():
                         if plot_mode == "実績を囲む（エリア）":
                             # 入数ごとにxの最小・最大を抽出
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
-                            stats = stats.sort_values("入_数", ascending=False) # 入数が多い順
+                            stats = stats.sort_values("入数", ascending=False) # 入数が多い順
                             
                             x_path = []
                             y_path = []
