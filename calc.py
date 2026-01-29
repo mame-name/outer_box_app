@@ -2,23 +2,29 @@ import pandas as pd
 
 def process_product_data(df):
     """
-    指定10列のデータクリーニングを行う
+    指定された列のクリーニングと基本加工
     """
     df = df.copy()
 
-    # 文字列のクリーニング（P列:製品サイズ, D列:充填機, C列:形態, AB列:シール）
-    str_cols = ['製品サイズ', '充填機', '形態', 'シール', '名前', '製品コード', '顧客名']
-    for col in str_cols:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-
-    # 数値の変換（F列:重量, G列:入数, J列:比重）
-    num_cols = ['重量', '入数', '比重']
+    # 1. 数値変換 (重量(個), 入数, 重量(箱), 比重)
+    num_cols = ['重量（個）', '入数', '重量（箱）', '比重']
     for col in num_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # 必須列「製品サイズ」が空の行を除外
+    # 2. 文字列クリーニング
+    str_cols = ['製品コード', '製品名', '荷姿', '形態', '外箱', '製品サイズ']
+    for col in str_cols:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+
+    # 3. 製品サイズの分離 (巾*長さ)
+    # AA列(製品サイズ)が "100*150" のような形式であることを想定
+    size_split = df["製品サイズ"].str.split('*', n=1, expand=True)
+    df["巾"] = pd.to_numeric(size_split[0], errors='coerce')
+    df["長さ"] = pd.to_numeric(size_split[1], errors='coerce')
+
+    # 無効なサイズの行を除外
     df = df[~df['製品サイズ'].isin(['nan', 'None', '', 'nan*nan'])]
     
     return df
