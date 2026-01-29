@@ -55,15 +55,16 @@ def main():
             # データ加工
             df_processed = process_product_data(df_raw)
             
-            # --- 【修正】「専用」を除外するフィルタリングを追加 ---
+            # --- 【修正】除外リスト（専用, No,27, HC21-3）を適用 ---
+            exclude_boxes = ["専用", "No,27", "HC21-3"]
             df_filtered = df_processed[
                 (df_processed["形態"] == i_type) & 
-                (df_processed["外箱"] != "専用")
+                (~df_processed["外箱"].isin(exclude_boxes))
             ].copy()
-            # --------------------------------------------------
+            # ----------------------------------------------------
 
             if not df_filtered.empty:
-                st.subheader(f"📈 外箱分布マップ（{i_type} / ※専用を除く）")
+                st.subheader(f"📈 外箱分布マップ（{i_type} / ※例外箱を除く）")
                 plot_data = df_filtered[df_filtered["単一体積"] > 0].copy()
 
                 # 1. 散布図作成
@@ -75,7 +76,7 @@ def main():
                     labels={"単一体積": "1個あたりの体積 (重量/比重)", "入数": "入数 [個]"}
                 )
 
-                # 2. 領域の塗りつぶし（実線・エリア表現）
+                # 2. 領域の塗りつぶし（点線なしの実線エリア）
                 for box_type in plot_data["外箱"].unique():
                     group = plot_data[plot_data["外箱"] == box_type]
                     if len(group) >= 3:
@@ -106,8 +107,11 @@ def main():
                             name='シミュレーション'
                         ))
                         
-                        fig.update_xaxes(range=[0, max(plot_data["単一体積"].max() if not plot_data.empty else 0, sim_unit_vol) * 1.1])
-                        fig.update_yaxes(range=[0, max(plot_data["入数"].max() if not plot_data.empty else 0, pcs_val) * 1.1])
+                        # グラフ範囲の調整
+                        max_vol = max(plot_data["単一体積"].max() if not plot_data.empty else 0, sim_unit_vol)
+                        max_pcs = max(plot_data["入数"].max() if not plot_data.empty else 0, pcs_val)
+                        fig.update_xaxes(range=[0, max_vol * 1.1])
+                        fig.update_yaxes(range=[0, max_pcs * 1.1])
                     except ValueError:
                         pass
 
@@ -115,10 +119,10 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
 
                 st.divider()
-                st.subheader("📊 実績データ一覧（専用を除く）")
+                st.subheader("📊 実績データ一覧（例外箱を除く）")
                 st.dataframe(df_filtered, use_container_width=True, height=500)
             else:
-                st.warning(f"「{i_type}」かつ「専用以外」に一致するデータが見つかりませんでした。")
+                st.warning(f"「{i_type}」に該当する有効なデータが見つかりませんでした。")
         except Exception as e:
             st.error(f"エラー: {e}")
     else:
