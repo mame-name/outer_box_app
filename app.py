@@ -6,7 +6,7 @@ from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
 
-# CSS: スタイル調整
+# CSS: スタイル調整（チェックボックスを横並びにするためのスタイル含む）
 st.markdown("""
     <style>
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
@@ -14,6 +14,8 @@ st.markdown("""
     [data-testid="stSidebar"] label { font-size: 0.85rem !important; }
     .block-container { padding-top: 1.5rem !important; }
     ::placeholder { color: #aaaaaa !important; }
+    /* チェックボックス群の余白調整 */
+    .stCheckbox { margin-bottom: -10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -63,20 +65,22 @@ def main():
             ].copy()
 
             if not df_base.empty:
-                # --- 【新設】右画面での外箱選択機能 ---
                 st.subheader(f"📈 外箱分布マップ（{i_type}）")
                 
-                # 存在する外箱のリストを取得
+                # --- 【修正】横並びチェックボックスの実装 ---
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
+                st.write("表示する外箱を選択:")
                 
-                # 選択用マルチセレクト（デフォルトで全選択）
-                selected_boxes = st.multiselect(
-                    "表示する外箱を選択してください（すべて表示中）", 
-                    options=available_boxes, 
-                    default=available_boxes
-                )
+                # 画面の幅に合わせてチェックボックスを配置（5列で折り返し）
+                cols = st.columns(5)
+                selected_boxes = []
+                for idx, box in enumerate(available_boxes):
+                    with cols[idx % 5]:
+                        if st.checkbox(box, value=True, key=f"chk_{box}"):
+                            selected_boxes.append(box)
+                # ------------------------------------------
 
-                # 選択された箱だけでデータを最終フィルタリング
+                # 選択された箱だけでフィルタリング
                 df_filtered = df_base[df_base["外箱"].isin(selected_boxes)].copy()
                 plot_data = df_filtered[df_filtered["単一体積"] > 0].copy()
 
@@ -87,7 +91,7 @@ def main():
                     hover_data={"製品コード":True, "単一体積":":.3f", "重量（個）":True, "比重":True, "入数":True, "外箱":True},
                     template="plotly_white", height=650,
                     labels={"単一体積": "1個あたりの体積 (重量/比重)", "入数": "入数 [個]"},
-                    category_orders={"外箱": available_boxes} # 色を固定するために順序を維持
+                    category_orders={"外箱": available_boxes}
                 )
 
                 # 実線エリアチャート表現
@@ -115,13 +119,13 @@ def main():
                             marker=dict(symbol='star', size=25, color='red', line=dict(width=2, color='white')),
                             text=["ターゲット"], textposition="top center", name='ターゲット'
                         ))
-                        # ターゲットを含めた範囲調整（データが空でもターゲットが見えるように）
+                        # 範囲拡張
                         max_vol = max(plot_data["単一体積"].max() if not plot_data.empty else 0, sim_unit_vol)
                         max_pcs = max(plot_data["入数"].max() if not plot_data.empty else 0, sim_pcs)
                         fig.update_xaxes(range=[0, max_vol * 1.1])
                         fig.update_yaxes(range=[0, max_pcs * 1.1])
                     except:
-                        st.sidebar.warning("数値を入力してください")
+                        pass
 
                 fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                 st.plotly_chart(fig, use_container_width=True)
