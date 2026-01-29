@@ -112,8 +112,8 @@ def main():
                             stats = stats.sort_values("入数") # 入数が少ない順に並べる
 
                             # 右側の縁（下から上へ）＋ 左側の縁（上から下へ戻る）
-                            x_coords = stats['max'].tolist() + stats['min'].tolist()[::-3]
-                            y_coords = stats['入数'].tolist() + stats['入数'].tolist()[::-3]
+                            x_coords = stats['max'].tolist() + stats['min'].tolist()[::-1]
+                            y_coords = stats['入数'].tolist() + stats['入数'].tolist()[::-1]
                             
                             # 完全に図形を閉じる
                             x_coords.append(x_coords[0])
@@ -176,3 +176,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
