@@ -4,19 +4,16 @@ from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
 
-# CSS: サイドバー内の余白詰めとデザイン調整
+# CSS: サイドバー内の余白詰め、入力欄のプレースホルダー色調整、スピンボタン排除
 st.markdown("""
     <style>
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
     [data-testid="stSidebar"] .element-container { margin-bottom: -8px; }
     [data-testid="stSidebar"] label { font-size: 0.85rem !important; }
     .block-container { padding-top: 1.5rem !important; }
-    /* 数値入力のインクリメントボタンを隠す（Chrome等） */
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button { 
-        -webkit-appearance: none; margin: 0; 
-    }
-    input[type=number] { -moz-appearance: textfield; }
+    
+    /* プレースホルダーの文字色を少し見やすく */
+    ::placeholder { color: #aaaaaa !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -31,28 +28,26 @@ def main():
         st.subheader("📝 条件設定")
         with st.form("sim_form"):
             # レイアウト用ヘルパー関数
-            def input_row(label, is_number=False, val="0"):
+            def input_row(label, placeholder_text=""):
                 c1, c2 = st.columns([1, 2])
                 with c1: st.markdown(f"<div style='padding-top:8px;'>{label}</div>", unsafe_allow_html=True)
                 with c2:
-                    if is_number:
-                        # text_inputにすることで +/- ボタンを強制排除
-                        return st.text_input(label, value=str(val), label_visibility="collapsed")
-                    else:
-                        return st.text_input(label, label_visibility="collapsed")
+                    # value="" にすることで初期値を空にし、placeholderを表示
+                    return st.text_input(label, value="", placeholder=placeholder_text, label_visibility="collapsed")
 
-            # 荷姿も横並びに修正
+            # 荷姿（セレクトボックス）
             c1, c2 = st.columns([1, 2])
             with c1: st.markdown("<div style='padding-top:8px;'>荷姿</div>", unsafe_allow_html=True)
             with c2: i_nosugata = st.selectbox("荷姿", ["液体", "粉体", "その他"], label_visibility="collapsed")
 
-            i_weight = input_row("重量（個）", is_number=True, val="0.0")
-            i_pcs = input_row("入数", is_number=True, val="0")
-            i_sg = input_row("比重", is_number=True, val="0.000")
-            i_size = input_row("製品サイズ") # 巾*長さ
+            # 各入力欄（初期値なし、背景にヒントを表示）
+            i_weight = input_row("重量（個）", "単位：g")
+            i_pcs = input_row("入数", "単位：個")
+            i_sg = input_row("比重", "0.000")
+            i_size = input_row("製品サイズ", "巾*長さ")
             
             st.markdown("<div style='padding-top:10px;'></div>", unsafe_allow_html=True)
-            st.form_submit_button("シミュレーション実行", use_container_width=True)
+            calc_submit = st.form_submit_button("シミュレーション実行", use_container_width=True)
 
     # --- メイン画面：スクロールエリア ---
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん</h1>", unsafe_allow_html=True)
@@ -61,6 +56,7 @@ def main():
 
     if uploaded_file:
         try:
+            # A=0, B=1, C=2, D=3, F=5, G=6, I=8, J=9, P=15, AA=26
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = [
                 "製品コード", "製品名", "荷姿", "形態", 
@@ -80,6 +76,7 @@ def main():
             df_final = process_product_data(df_raw)
             
             st.subheader("📊 実績データ一覧")
+            # 右画面の表（メイン画面と一緒にスクロール）
             st.dataframe(df_final, use_container_width=True, height=800)
             st.success(f"読み込み完了: {len(df_final)} 件")
             
