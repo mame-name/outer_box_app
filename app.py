@@ -14,7 +14,6 @@ st.markdown("""
     [data-testid="stSidebar"] label { font-size: 0.85rem !important; }
     .block-container { padding-top: 1.5rem !important; }
     ::placeholder { color: #aaaaaa !important; }
-    /* チェックボックスの並びをタイトにする */
     .stCheckbox { margin-top: -15px; }
     </style>
     """, unsafe_allow_html=True)
@@ -57,7 +56,7 @@ def main():
             
             df_processed = process_product_data(df_raw)
             
-            # 除外・空欄削除
+            # 全体のベースデータ（除外設定のみ適用）
             exclude_boxes = ["専用", "No,27", "HC21-3"]
             df_base = df_processed[
                 (df_processed["形態"] == i_type) & 
@@ -67,30 +66,24 @@ def main():
             ].copy()
 
             if not df_base.empty:
-                # 存在する外箱の種類を取得
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
 
-                # --- グラフ表示（先にデータ準備） ---
-                # セッション状態を使ってチェックボックスの選択を管理
-                selected_boxes = []
-                # グラフ描画のためのプレースホルダ
+                # 先に表示場所を確保
                 plot_spot = st.empty()
                 
-                # --- チェックボックス配置（グラフの下） ---
-                num_boxes = len(available_boxes)
-                # 1行に収めるため、箱の数だけカラムを作成
-                check_cols = st.columns(max(num_boxes, 1)) 
-                
+                # チェックボックス配置
+                selected_boxes = []
+                check_cols = st.columns(max(len(available_boxes), 1)) 
                 for idx, box in enumerate(available_boxes):
                     with check_cols[idx]:
                         if st.checkbox(box, value=True, key=f"chk_{box}"):
                             selected_boxes.append(box)
 
-                # 選択フィルタ適用
-                df_filtered = df_base[df_base["外箱"].isin(selected_boxes)].copy()
-                plot_data = df_filtered[df_filtered["単一体積"] > 0].copy()
+                # 表示用データの作成
+                df_display = df_base[df_base["外箱"].isin(selected_boxes)].copy()
+                plot_data = df_display[df_display["単一体積"] > 0].copy()
 
-                # グラフ作成
+                # グラフ初期化（ベースはplot_data、ただし空でも動作するように設定）
                 fig = px.scatter(
                     plot_data, x="単一体積", y="入数", color="外箱",
                     hover_name="製品名",
@@ -100,41 +93,47 @@ def main():
                     category_orders={"外箱": available_boxes}
                 )
 
+                # エリアチャートの追加
                 for box_type in selected_boxes:
                     group = plot_data[plot_data["外箱"] == box_type]
                     if len(group) >= 3:
                         fig.add_trace(go.Scatter(
                             x=group["単一体積"], y=group["入数"],
-                            fill='toself', 
-                            fillcolor='rgba(150, 150, 150, 0.1)',
+                            fill='toself', fillcolor='rgba(150, 150, 150, 0.1)',
                             line=dict(width=1.5, dash='solid', color='rgba(100, 100, 100, 0.3)'),
                             name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
                         ))
 
-                # プロット実行
-                if calc_submit and i_weight and i_sg and i_pcs:
+                # --- 【重要】ターゲットの計算と表示 ---
+                # plot_dataが空でも（チェックが全部外れても）、ターゲットの値を保持する
+                if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
                         sim_pcs = float(i_pcs)
+                        
+                        # 赤い星印を追加
                         fig.add_trace(go.Scatter(
                             x=[sim_unit_vol], y=[sim_pcs],
                             mode='markers+text',
                             marker=dict(symbol='star', size=25, color='red', line=dict(width=2, color='white')),
                             text=["ターゲット"], textposition="top center", name='ターゲット'
                         ))
-                        max_vol = max(plot_data["単一体積"].max() if not plot_data.empty else 0, sim_unit_vol)
-                        max_pcs = max(plot_data["入数"].max() if not plot_data.empty else 0, sim_pcs)
-                        fig.update_xaxes(range=[0, max_vol * 1.1])
-                        fig.update_yaxes(range=[0, max_pcs * 1.1])
-                    except: pass
 
-                fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                # プレースホルダにグラフを流し込む
+                        # グラフの表示範囲を決定（データがなくてもターゲットを中心に表示）
+                        # 全体の基準点として df_base（チェックを外す前の全データ）の最大値も参考にする
+                        ref_vol = df_base["単一体積"].max() if not df_base.empty else sim_unit_vol
+                        ref_pcs = df_base["入数"].max() if not df_base.empty else sim_pcs
+                        
+                        fig.update_xaxes(range=[0, max(ref_vol, sim_unit_vol) * 1.1])
+                        fig.update_yaxes(range=[0, max(ref_pcs, sim_pcs) * 1.1])
+                    except:
+                        pass
+
                 plot_spot.plotly_chart(fig, use_container_width=True)
 
                 st.divider()
                 st.subheader("📊 実績データ一覧")
-                st.dataframe(df_filtered, use_container_width=True, height=500)
+                st.dataframe(df_display, use_container_width=True, height=500)
             else:
                 st.warning(f"「{i_type}」に該当するデータがありません。")
         except Exception as e:
