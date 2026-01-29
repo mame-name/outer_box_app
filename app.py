@@ -10,13 +10,13 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-AREA_LINE_WIDTH = 0        # 境界線は消して面を滑らかに
+AREA_LINE_WIDTH = 1.0      
 AREA_OPACITY = 0.4         # 違う箱同士が重なった時に識別できる透明度
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
 # ==========================================
 
-# CSS: スタイル調整
+# CSS
 st.markdown("""
     <style>
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
@@ -97,54 +97,60 @@ def main():
                 color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
                 if not plot_data.empty:
-                    if plot_mode == "実績を囲む（エリア）":
-                        # --- 背景シェイプとして描画する方式 ---
-                        shapes = []
-                        for box_type in selected_boxes:
-                            group = plot_data[plot_data["外箱"] == box_type]
-                            if len(group) < 1: continue
+                    for box_type in selected_boxes:
+                        group = plot_data[plot_data["外箱"] == box_type]
+                        if len(group) < 1: continue
 
+                        if plot_mode == "実績を囲む（エリア）":
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
-                            stats = stats.sort_values("入数", ascending=False)
+                            stats = stats.sort_values("入数", ascending=False) # 入数大→小
 
-                            # 各点について「1個下」「2個下」との面を作成
+                            # --- 外周パスを合成するロジック ---
+                            # 右側の壁（max）と左側の壁（min）を個別に構築
+                            right_pts = []
+                            left_pts = []
+
                             for i in range(len(stats)):
-                                p_curr = stats.iloc[i]
+                                curr = stats.iloc[i]
+                                # 現在の点を追加
+                                right_pts.append((curr['max'], curr['入数']))
+                                left_pts.append((curr['min'], curr['入数']))
+                                
+                                # 1個下、2個下との「結び目」も外周候補として追加
                                 for dist in [1, 2]:
                                     if i + dist < len(stats):
-                                        p_target = stats.iloc[i + dist]
-                                        
-                                        # 四角形のパス文字列を生成 (L: Line to, Z: Close path)
-                                        path = f"M {p_curr['min']},{p_curr['入数']} L {p_curr['max']},{p_curr['入数']} " \
-                                               f"L {p_target['max']},{p_target['入数']} L {p_target['min']},{p_target['入数']} Z"
-                                        
-                                        shapes.append(dict(
-                                            type="path", path=path,
-                                            fillcolor=color_map[box_type],
-                                            line=dict(width=0),
-                                            opacity=AREA_OPACITY,
-                                            layer="below"
-                                        ))
-                            
-                            # 凡例表示用に空のScatterを1つ追加
-                            fig.add_trace(go.Scatter(
-                                x=[None], y=[None], mode='markers',
-                                marker=dict(size=10, color=color_map[box_type], symbol='square'),
-                                name=box_type
-                            ))
-                        fig.update_layout(shapes=shapes)
+                                        target = stats.iloc[i + dist]
+                                        # 右側の壁に「今のmaxからターゲットのmaxへの直線」を意識した点を追加
+                                        right_pts.append((target['max'], target['入数']))
+                                        left_pts.append((target['min'], target['入数']))
 
-                    else:
-                        # 全てのプロット（点）モード
-                        for box_type in selected_boxes:
-                            group = plot_data[plot_data["外箱"] == box_type]
+                            # 重複を排除しつつ、入数の降順・昇順で並べ直して一本のパスにする
+                            # 右側：入数大 -> 小
+                            right_pts = sorted(list(set(right_pts)), key=lambda x: x[1], reverse=True)
+                            # 左側：入数小 -> 大（下から上に戻る）
+                            left_pts = sorted(list(set(left_pts)), key=lambda x: x[1], reverse=False)
+
+                            full_x = [p[0] for p in right_pts] + [p[0] for p in left_pts]
+                            full_y = [p[1] for p in right_pts] + [p[1] for p in left_pts]
+
+                            fig.add_trace(go.Scatter(
+                                x=full_x, y=full_y,
+                                fill='toself', 
+                                fillcolor=color_map[box_type],
+                                mode='lines',
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                opacity=AREA_OPACITY,
+                                name=box_type,
+                                hoverinfo='skip'
+                            ))
+                        else:
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
                                 mode='markers',
                                 marker=dict(size=MARKER_SIZE, color=color_map[box_type]),
                                 name=box_type,
                                 text=group["製品名"],
-                                hovertemplate="<b>%{text}</b><br>体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
+                                hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
                 # ターゲット
