@@ -23,7 +23,6 @@ def main():
         st.subheader("📝 条件設定")
         
         with st.form("sim_form"):
-            # 入力項目: 荷姿, 重量(個), 入数, 比重, 製品サイズ
             i_nosugata = st.selectbox("荷姿", ["液体", "粉体", "その他"])
             i_weight = st.number_input("重量（個） (g)", value=0.0, step=0.1)
             i_pcs = st.number_input("入数", value=0, step=1)
@@ -41,7 +40,6 @@ def main():
         
         if uploaded_file:
             try:
-                # 指定されたインデックスの定義
                 # A:0, B:1, C:2, D:3, F:5, G:6, I:8, J:9, P:15, AA:26
                 target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
                 col_names = [
@@ -59,16 +57,15 @@ def main():
                     engine='openpyxl'
                 )
                 
-                # calc.pyで処理
+                # calc.pyで処理（全件保持）
                 df_final = process_product_data(df_raw)
                 
                 # テーブル表示
                 st.dataframe(df_final, use_container_width=True, height=600)
-                st.success(f"読み込み完了: {len(df_final)} 件を表示中")
+                st.success(f"読み込み完了: {len(df_final)} 件の全データを表示中")
                 
             except Exception as e:
                 st.error(f"読み込みエラー: {e}")
-                st.info("Excelの列構成やシート名を確認してください。")
         else:
             st.info("左側のフォームから実績ファイルをアップロードしてください。")
 
