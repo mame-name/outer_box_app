@@ -98,7 +98,6 @@ def main():
 
                 if not plot_data.empty:
                     if plot_mode == "実績を囲む（エリア）":
-                        # 同じ箱の複数の四角形を「1つのパス」として結合することで、重なりの濃淡を防ぐ
                         for box_type in selected_boxes:
                             group = plot_data[plot_data["外箱"] == box_type]
                             if len(group) < 1: continue
@@ -109,16 +108,15 @@ def main():
                             combined_x = []
                             combined_y = []
 
-                            # 1個下、2個下、それぞれのペアを結ぶ四角形を生成
                             for i in range(len(stats)):
                                 p_curr = stats.iloc[i]
-                                for dist in [1, 2]:
-                                    if i + dist < len(stats):
-                                        p_target = stats.iloc[i + dist]
-                                        
-                                        # 四角形の4点を追加し、Noneで区切る（これがPlotlyで濃淡を出さないコツ）
-                                        combined_x.extend([p_curr['min'], p_curr['max'], p_target['max'], p_target['min'], p_curr['min'], None])
-                                        combined_y.extend([p_curr['入数'], p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入数'], None])
+                                # 【変更点】1個下（dist=1）とのみ接続
+                                if i + 1 < len(stats):
+                                    p_target = stats.iloc[i + 1]
+                                    
+                                    # 四角形を構築してNoneで区切り、同じトレース内で描画（濃淡防止）
+                                    combined_x.extend([p_curr['min'], p_curr['max'], p_target['max'], p_target['min'], p_curr['min'], None])
+                                    combined_y.extend([p_curr['入数'], p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入数'], None])
 
                             fig.add_trace(go.Scatter(
                                 x=combined_x, y=combined_y,
@@ -142,7 +140,7 @@ def main():
                                 hovertemplate="<b>%{text}</b><br>体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
-                # ターゲット
+                # ターゲット表示
                 if i_weight and i_sg and i_pcs:
                     try:
                         sv, sp = float(i_weight) / float(i_sg), float(i_pcs)
