@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from scipy.spatial import ConvexHull  # 外周計算用に追加
+import numpy as np
 from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
@@ -9,11 +11,9 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-AREA_LINE_WIDTH = 1.5      # エリア外周の線幅
-AREA_OPACITY = 0.1         # エリア内の塗りつぶし透明度
-MARKER_SIZE = 8            # 実績データの点サイズ
+AREA_LINE_WIDTH = 2        # エリア外周の線幅
+AREA_OPACITY = 0.4         # エリア内の塗りつぶし透明度（少し濃いめに設定）
 SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
-PLOT_OPACITY = 0.8         # 実績データの透明度
 # ==========================================
 
 # CSS: スタイル調整
@@ -90,38 +90,51 @@ def main():
 
                 fig = go.Figure()
 
-                if not plot_data.empty:
-                    temp_fig = px.scatter(
-                        plot_data, x="単一体積", y="入数", color="外箱",
-                        hover_name="製品名",
-                        hover_data={"製品コード":True, "単一体積":":.3f", "重量（個）":True, "比重":True, "入数":True, "外箱":True},
-                        category_orders={"外箱": available_boxes},
-                        opacity=PLOT_OPACITY
-                    )
-                    temp_fig.update_traces(marker=dict(size=MARKER_SIZE))
-                    for trace in temp_fig.data:
-                        fig.add_trace(trace)
+                # カラーパレットの取得（外箱ごとに一貫した色を割り振るため）
+                colors = px.colors.qualitative.Plotly
+                color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
+                if not plot_data.empty:
                     for box_type in selected_boxes:
                         group = plot_data[plot_data["外箱"] == box_type]
+                        
+                        # 3点以上あれば外周（凸包）を描画
                         if len(group) >= 3:
-                            fig.add_trace(go.Scatter(
-                                x=group["単一体積"], y=group["入数"],
-                                fill='toself', 
-                                fillcolor=f'rgba(150, 150, 150, {AREA_OPACITY})',
-                                line=dict(width=AREA_LINE_WIDTH, dash='solid', color='rgba(100, 100, 100, 0.3)'),
-                                name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
-                            ))
+                            points = group[["単一体積", "入数"]].values
+                            try:
+                                hull = ConvexHull(points)
+                                # 閉じた図形にするため、最初の点を最後に加える
+                                hull_indices = np.append(hull.vertices, hull.vertices[0])
+                                hull_points = points[hull_indices]
 
+                                fig.add_trace(go.Scatter(
+                                    x=hull_points[:, 0], 
+                                    y=hull_points[:, 1],
+                                    fill='toself', 
+                                    fillcolor=color_map[box_type],
+                                    # 塗りつぶしの透明度を設定
+                                    opacity=AREA_OPACITY,
+                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                    name=box_type,
+                                    hoverinfo='name'
+                                ))
+                            except:
+                                # データが一直線上に並んでいる場合などはConvexHullがエラーになるためスキップ
+                                pass
+                        
+                        # 2点以下の場合は線や点として表示したい場合はここに追加可能ですが、
+                        # 今回は「外周を囲む」という目的のため、3点以上を対象としています。
+
+                # シミュレーションターゲット（星印）の描画
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
                         sim_pcs = float(i_pcs)
-                        # ターゲットの追加（modeから'text'を除去し、text引数を削除）
                         fig.add_trace(go.Scatter(
                             x=[sim_unit_vol], y=[sim_pcs],
                             mode='markers',
-                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', line=dict(width=2, color='white')),
+                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', 
+                                        line=dict(width=2, color='white')),
                             name='ターゲット'
                         ))
                     except: pass
