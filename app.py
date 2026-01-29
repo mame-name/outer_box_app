@@ -10,8 +10,8 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-SPAN_N = 3                 # ★調整：何個下の実績までを「ひとつの塊」として包むか
-AREA_LINE_WIDTH = 2        
+SPAN_N = 3                 # ★調整：何個下の実績と繋ぐか（40個→30個など）
+AREA_LINE_WIDTH = 1.5      
 AREA_OPACITY = 0.3         
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
@@ -103,44 +103,45 @@ def main():
                         if len(group) < 1: continue
 
                         if plot_mode == "実績を囲む（エリア）":
-                            # 入数ごとに最大・最小を抽出
+                            # 入数ごとに最大・最小を算出
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
                             stats = stats.sort_values("入数", ascending=False) # 入数大→小
 
-                            env_max_x, env_max_y = [], []
-                            env_min_x, env_min_y = [], []
+                            # 座標リストの作成
+                            right_x, right_y = [], []
+                            left_x, left_y = [], []
 
-                            # 右側の外郭（最大値ライン）
+                            # 右側のライン（最大体積を繋ぐ）
                             for i in range(len(stats)):
                                 curr = stats.iloc[i]
-                                # 現在からSPAN_N個先までの全実績をカバーする最大値をとる
                                 target_idx = min(i + SPAN_N, len(stats) - 1)
-                                scope = stats.iloc[i : target_idx + 1]
-                                env_max_x.append(scope['max'].max())
-                                env_max_y.append(curr['入数'])
+                                target = stats.iloc[target_idx]
+                                # 「今」と「N個下」を交互に追加して線を繋ぐ
+                                right_x.extend([curr['max'], target['max']])
+                                right_y.extend([curr['入数'], target['入数']])
 
-                            # 左側の外郭（最小値ライン）を逆順（下から上）で作成
+                            # 左側のライン（最小体積を繋ぐ：逆順で戻る）
                             for i in range(len(stats)-1, -1, -1):
                                 curr = stats.iloc[i]
-                                # 現在からSPAN_N個上までの全実績をカバーする最小値をとる
                                 target_idx = max(i - SPAN_N, 0)
-                                scope = stats.iloc[target_idx : i + 1]
-                                env_min_x.append(scope['min'].min())
-                                env_min_y.append(curr['入数'])
+                                target = stats.iloc[target_idx]
+                                # 「今」と「N個上」を交互に追加して線を繋ぐ
+                                left_x.extend([curr['min'], target['min']])
+                                left_y.extend([curr['入数'], target['入数']])
 
-                            # パスを結合して閉じる
-                            x_path = env_max_x + env_min_x + [env_max_x[0]]
-                            y_path = env_max_y + env_min_y + [env_max_y[0]]
+                            # パスの結合（右を下りてから左を上る）
+                            full_x = right_x + left_x + [right_x[0]]
+                            full_y = right_y + left_y + [right_y[0]]
 
                             fig.add_trace(go.Scatter(
-                                x=x_path, y=y_path,
+                                x=full_x, y=full_y,
                                 fill='toself', 
                                 fillcolor=color_map[box_type],
                                 mode='lines',
-                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='hv'),
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
                                 opacity=AREA_OPACITY,
                                 name=box_type,
-                                hoverinfo='name'
+                                hoverinfo='skip'
                             ))
                         else:
                             fig.add_trace(go.Scatter(
@@ -154,13 +155,10 @@ def main():
 
                 if i_weight and i_sg and i_pcs:
                     try:
-                        sim_unit_vol = float(i_weight) / float(i_sg)
-                        sim_pcs = float(i_pcs)
+                        sv, sp = float(i_weight) / float(i_sg), float(i_pcs)
                         fig.add_trace(go.Scatter(
-                            x=[sim_unit_vol], y=[sim_pcs],
-                            mode='markers',
-                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', 
-                                        line=dict(width=2, color='white')),
+                            x=[sv], y=[sp], mode='markers',
+                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', line=dict(width=2, color='white')),
                             name='ターゲット'
                         ))
                     except: pass
