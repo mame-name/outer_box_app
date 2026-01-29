@@ -3,7 +3,7 @@ import pandas as pd
 def process_product_data(df):
     df = df.copy()
 
-    # 1. 製品コードを6桁ゼロ埋め
+    # 1. 製品コード 000000 形式
     def format_code(x):
         if pd.isna(x) or x == "": return ""
         try:
@@ -18,19 +18,17 @@ def process_product_data(df):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # 3. 体積列の作成 (重量 / 比重 * 入数)
-    # 比重が0だとエラーになるため条件分岐
-    def calc_volume(row):
+    # 3. 単一体積（1個あたり）の作成 (重量 / 比重)
+    def calc_unit_volume(row):
         try:
             w = float(row['重量（個）'])
             sg = float(row['比重'])
-            n = float(row['入数'])
             if sg > 0:
-                return w / sg * n
+                return w / sg
             return 0
         except:
             return 0
-    df['体積'] = df.apply(calc_volume, axis=1)
+    df['単一体積'] = df.apply(calc_unit_volume, axis=1)
 
     # 4. 文字列クリーニング
     str_cols = ['製品名', '荷姿', '形態', '外箱', '製品サイズ']
@@ -38,7 +36,7 @@ def process_product_data(df):
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace('nan', '').str.strip()
 
-    # 5. 製品サイズの分解 (巾*長さ)
+    # 5. 製品サイズの分解
     def split_size(size_str):
         if '*' in size_str:
             parts = size_str.split('*')
@@ -50,4 +48,4 @@ def process_product_data(df):
 
     df[['巾', '長さ']] = df.apply(lambda row: pd.Series(split_size(row['製品サイズ'])), axis=1)
     
-    return df
+    return df df
