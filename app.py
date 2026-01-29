@@ -10,8 +10,8 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-AREA_LINE_WIDTH = 1.5      
-AREA_OPACITY = 0.3         
+AREA_LINE_WIDTH = 0.5      # 線を細くして重ねを綺麗に見せる
+AREA_OPACITY = 0.25         # 重なりで色が濃くなるので少し薄めに設定
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
 # ==========================================
@@ -103,61 +103,31 @@ def main():
 
                         if plot_mode == "実績を囲む（エリア）":
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
-                            stats = stats.sort_values("入数", ascending=False) # 入数大→小
+                            stats = stats.sort_values("入数", ascending=False)
 
-                            full_x = []
-                            full_y = []
+                            # --- 【解決策】ひとつひとつの「帯」を独立した図形として描画 ---
+                            for i in range(len(stats) - 1):
+                                # i番目(今)とi+1番目(1個下)とi+2番目(2個下)のデータを取得
+                                p0 = stats.iloc[i]
+                                p1 = stats.iloc[i+1]
+                                p2 = stats.iloc[i+2] if (i+2) < len(stats) else p1
 
-                            # 1. 右側の壁（最大値）：1個下、および2個下と結ぶ
-                            for i in range(len(stats)):
-                                curr = stats.iloc[i]
-                                full_x.append(curr['max'])
-                                full_y.append(curr['入数'])
-                                
-                                # 1個下との接続
-                                if i + 1 < len(stats):
-                                    t1 = stats.iloc[i + 1]
-                                    full_x.extend([curr['max'], t1['max']])
-                                    full_y.extend([curr['入数'], t1['入数']])
-                                
-                                # 2個下との接続（追加分）
-                                if i + 2 < len(stats):
-                                    t2 = stats.iloc[i + 2]
-                                    full_x.extend([curr['max'], t2['max']])
-                                    full_y.extend([curr['入数'], t2['入数']])
+                                # 今の点と「1個下」「2個下」を含む四角形パスを作る
+                                # 右側のラインを下りて、左側のラインを上がる
+                                sub_x = [p0['max'], p1['max'], p2['max'], p2['min'], p1['min'], p0['min']]
+                                sub_y = [p0['入数'], p1['入数'], p2['入数'], p2['入数'], p1['入数'], p0['入数']]
 
-                            # 2. 左側の壁（最小値）：逆順で1個上、2個上と結ぶ
-                            for i in range(len(stats)-1, -1, -1):
-                                curr = stats.iloc[i]
-                                full_x.append(curr['min'])
-                                full_y.append(curr['入数'])
-                                
-                                # 1個上との接続
-                                if i - 1 >= 0:
-                                    t1 = stats.iloc[i - 1]
-                                    full_x.extend([curr['min'], t1['min']])
-                                    full_y.extend([curr['入数'], t1['入数']])
-                                
-                                # 2個上との接続（追加分）
-                                if i - 2 >= 0:
-                                    t2 = stats.iloc[i - 2]
-                                    full_x.extend([curr['min'], t2['min']])
-                                    full_y.extend([curr['入数'], t2['入数']])
-
-                            # 完全に閉じる
-                            full_x.append(full_x[0])
-                            full_y.append(full_y[0])
-
-                            fig.add_trace(go.Scatter(
-                                x=full_x, y=full_y,
-                                fill='toself', 
-                                fillcolor=color_map[box_type],
-                                mode='lines',
-                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                opacity=AREA_OPACITY,
-                                name=box_type,
-                                hoverinfo='skip'
-                            ))
+                                fig.add_trace(go.Scatter(
+                                    x=sub_x, y=sub_y,
+                                    fill='toself',
+                                    fillcolor=color_map[box_type],
+                                    mode='lines',
+                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                    opacity=AREA_OPACITY,
+                                    name=box_type,
+                                    showlegend=(i == 0), # 最初だけ凡例に出す
+                                    hoverinfo='skip'
+                                ))
                         else:
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
@@ -168,6 +138,7 @@ def main():
                                 hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
+                # ターゲット
                 if i_weight and i_sg and i_pcs:
                     try:
                         sv, sp = float(i_weight) / float(i_sg), float(i_pcs)
