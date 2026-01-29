@@ -6,7 +6,7 @@ from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
 
-# CSS: スタイル調整（チェックボックスを横並びにするためのスタイル含む）
+# CSS: スタイル調整
 st.markdown("""
     <style>
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
@@ -14,7 +14,6 @@ st.markdown("""
     [data-testid="stSidebar"] label { font-size: 0.85rem !important; }
     .block-container { padding-top: 1.5rem !important; }
     ::placeholder { color: #aaaaaa !important; }
-    /* チェックボックス群の余白調整 */
     .stCheckbox { margin-bottom: -10px; }
     </style>
     """, unsafe_allow_html=True)
@@ -55,32 +54,35 @@ def main():
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
             
+            # データ加工
             df_processed = process_product_data(df_raw)
             
-            # 初期フィルタ（形態と除外リスト）
+            # --- 【修正】外装（外箱）が空欄のものを削除 & 除外リスト適用 ---
             exclude_boxes = ["専用", "No,27", "HC21-3"]
+            
             df_base = df_processed[
                 (df_processed["形態"] == i_type) & 
+                (df_processed["外箱"].notna()) &          # 空欄(NaN)を除外
+                (df_processed["外箱"].str.strip() != "") & # 空文字を除外
                 (~df_processed["外箱"].isin(exclude_boxes))
             ].copy()
+            # ----------------------------------------------------------
 
             if not df_base.empty:
                 st.subheader(f"📈 外箱分布マップ（{i_type}）")
                 
-                # --- 【修正】横並びチェックボックスの実装 ---
+                # 横並びチェックボックス
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
                 st.write("表示する外箱を選択:")
                 
-                # 画面の幅に合わせてチェックボックスを配置（5列で折り返し）
-                cols = st.columns(5)
+                cols = st.columns(6) # 種類が多い可能性を考慮し6列に拡張
                 selected_boxes = []
                 for idx, box in enumerate(available_boxes):
-                    with cols[idx % 5]:
+                    with cols[idx % 6]:
                         if st.checkbox(box, value=True, key=f"chk_{box}"):
                             selected_boxes.append(box)
-                # ------------------------------------------
 
-                # 選択された箱だけでフィルタリング
+                # 選択フィルタ適用
                 df_filtered = df_base[df_base["外箱"].isin(selected_boxes)].copy()
                 plot_data = df_filtered[df_filtered["単一体積"] > 0].copy()
 
@@ -94,7 +96,7 @@ def main():
                     category_orders={"外箱": available_boxes}
                 )
 
-                # 実線エリアチャート表現
+                # エリアチャート表現
                 for box_type in selected_boxes:
                     group = plot_data[plot_data["外箱"] == box_type]
                     if len(group) >= 3:
@@ -108,7 +110,7 @@ def main():
                             hoverinfo='skip'
                         ))
 
-                # プロット実行
+                # ターゲットプロット
                 if calc_submit and i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
@@ -119,7 +121,7 @@ def main():
                             marker=dict(symbol='star', size=25, color='red', line=dict(width=2, color='white')),
                             text=["ターゲット"], textposition="top center", name='ターゲット'
                         ))
-                        # 範囲拡張
+                        
                         max_vol = max(plot_data["単一体積"].max() if not plot_data.empty else 0, sim_unit_vol)
                         max_pcs = max(plot_data["入数"].max() if not plot_data.empty else 0, sim_pcs)
                         fig.update_xaxes(range=[0, max_vol * 1.1])
@@ -134,7 +136,7 @@ def main():
                 st.subheader("📊 実績データ一覧")
                 st.dataframe(df_filtered, use_container_width=True, height=500)
             else:
-                st.warning(f"「{i_type}」に該当するデータがありません。")
+                st.warning(f"「{i_type}」に該当するデータ（外装あり）がありません。")
         except Exception as e:
             st.error(f"エラー: {e}")
     else:
