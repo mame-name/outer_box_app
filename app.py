@@ -14,7 +14,8 @@ st.markdown("""
     [data-testid="stSidebar"] label { font-size: 0.85rem !important; }
     .block-container { padding-top: 1.5rem !important; }
     ::placeholder { color: #aaaaaa !important; }
-    .stCheckbox { margin-bottom: -10px; }
+    /* チェックボックスの並びをタイトにする */
+    .stCheckbox { margin-top: -15px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -54,31 +55,34 @@ def main():
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
             
-            # データ加工
             df_processed = process_product_data(df_raw)
             
-            # --- 【修正】外装（外箱）が空欄のものを削除 & 除外リスト適用 ---
+            # 除外・空欄削除
             exclude_boxes = ["専用", "No,27", "HC21-3"]
-            
             df_base = df_processed[
                 (df_processed["形態"] == i_type) & 
-                (df_processed["外箱"].notna()) &          # 空欄(NaN)を除外
-                (df_processed["外箱"].str.strip() != "") & # 空文字を除外
+                (df_processed["外箱"].notna()) &
+                (df_processed["外箱"].str.strip() != "") &
                 (~df_processed["外箱"].isin(exclude_boxes))
             ].copy()
-            # ----------------------------------------------------------
 
             if not df_base.empty:
-                st.subheader(f"📈 外箱分布マップ（{i_type}）")
-                
-                # 横並びチェックボックス
+                # 存在する外箱の種類を取得
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
-                st.write("表示する外箱を選択:")
-                
-                cols = st.columns(6) # 種類が多い可能性を考慮し6列に拡張
+
+                # --- グラフ表示（先にデータ準備） ---
+                # セッション状態を使ってチェックボックスの選択を管理
                 selected_boxes = []
+                # グラフ描画のためのプレースホルダ
+                plot_spot = st.empty()
+                
+                # --- チェックボックス配置（グラフの下） ---
+                num_boxes = len(available_boxes)
+                # 1行に収めるため、箱の数だけカラムを作成
+                check_cols = st.columns(max(num_boxes, 1)) 
+                
                 for idx, box in enumerate(available_boxes):
-                    with cols[idx % 6]:
+                    with check_cols[idx]:
                         if st.checkbox(box, value=True, key=f"chk_{box}"):
                             selected_boxes.append(box)
 
@@ -91,12 +95,11 @@ def main():
                     plot_data, x="単一体積", y="入数", color="外箱",
                     hover_name="製品名",
                     hover_data={"製品コード":True, "単一体積":":.3f", "重量（個）":True, "比重":True, "入数":True, "外箱":True},
-                    template="plotly_white", height=650,
+                    template="plotly_white", height=600,
                     labels={"単一体積": "1個あたりの体積 (重量/比重)", "入数": "入数 [個]"},
                     category_orders={"外箱": available_boxes}
                 )
 
-                # エリアチャート表現
                 for box_type in selected_boxes:
                     group = plot_data[plot_data["外箱"] == box_type]
                     if len(group) >= 3:
@@ -105,12 +108,10 @@ def main():
                             fill='toself', 
                             fillcolor='rgba(150, 150, 150, 0.1)',
                             line=dict(width=1.5, dash='solid', color='rgba(100, 100, 100, 0.3)'),
-                            name=f"{box_type} の範囲", 
-                            showlegend=False, 
-                            hoverinfo='skip'
+                            name=f"{box_type} の範囲", showlegend=False, hoverinfo='skip'
                         ))
 
-                # ターゲットプロット
+                # プロット実行
                 if calc_submit and i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
@@ -121,22 +122,21 @@ def main():
                             marker=dict(symbol='star', size=25, color='red', line=dict(width=2, color='white')),
                             text=["ターゲット"], textposition="top center", name='ターゲット'
                         ))
-                        
                         max_vol = max(plot_data["単一体積"].max() if not plot_data.empty else 0, sim_unit_vol)
                         max_pcs = max(plot_data["入数"].max() if not plot_data.empty else 0, sim_pcs)
                         fig.update_xaxes(range=[0, max_vol * 1.1])
                         fig.update_yaxes(range=[0, max_pcs * 1.1])
-                    except:
-                        pass
+                    except: pass
 
                 fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig, use_container_width=True)
+                # プレースホルダにグラフを流し込む
+                plot_spot.plotly_chart(fig, use_container_width=True)
 
                 st.divider()
                 st.subheader("📊 実績データ一覧")
                 st.dataframe(df_filtered, use_container_width=True, height=500)
             else:
-                st.warning(f"「{i_type}」に該当するデータ（外装あり）がありません。")
+                st.warning(f"「{i_type}」に該当するデータがありません。")
         except Exception as e:
             st.error(f"エラー: {e}")
     else:
