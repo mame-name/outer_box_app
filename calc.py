@@ -2,7 +2,7 @@ import pandas as pd
 
 def process_product_data(df):
     """
-    指定された列のクリーニングと基本加工
+    全データを出力し、製品サイズが有効な場合のみ巾・長さを抽出する
     """
     df = df.copy()
 
@@ -16,15 +16,28 @@ def process_product_data(df):
     str_cols = ['製品コード', '製品名', '荷姿', '形態', '外箱', '製品サイズ']
     for col in str_cols:
         if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
+            df[col] = df[col].astype(str).str.replace('nan', '').str.strip()
 
-    # 3. 製品サイズの分離 (巾*長さ)
-    # AA列(製品サイズ)が "100*150" のような形式であることを想定
-    size_split = df["製品サイズ"].str.split('*', n=1, expand=True)
-    df["巾"] = pd.to_numeric(size_split[0], errors='coerce')
-    df["長さ"] = pd.to_numeric(size_split[1], errors='coerce')
+    # 3. 製品サイズの処理 (絞り込みはせず、可能なものだけ分解)
+    # デフォルト値を設定
+    df["巾"] = None
+    df["長さ"] = None
 
-    # 無効なサイズの行を除外
-    df = df[~df['製品サイズ'].isin(['nan', 'None', '', 'nan*nan'])]
+    def split_size(size_str):
+        if '*' in size_str:
+            parts = size_str.split('*')
+            try:
+                # 数値として抽出を試みる
+                w = float(parts[0])
+                l = float(parts[1])
+                return w, l
+            except:
+                return None, None
+        return None, None
+
+    # 分解処理を適用
+    df[['巾', '長さ']] = df.apply(
+        lambda row: pd.Series(split_size(row['製品サイズ'])), axis=1
+    )
     
     return df
