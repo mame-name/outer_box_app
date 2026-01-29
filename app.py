@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+import alphashape  # 凹包（いびつな外周）計算用
 from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
@@ -10,20 +11,17 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-AREA_LINE_WIDTH = 2        # エリア外周の線幅
-AREA_OPACITY = 0.2         # エリア内の塗りつぶし透明度
-MARKER_SIZE = 8            # プロットの点サイズ
-SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
+AREA_LINE_WIDTH = 2
+AREA_OPACITY = 0.2
+MARKER_SIZE = 8
+SIM_MARKER_SIZE = 18
 # ==========================================
 
 # CSS: スタイル調整
 st.markdown("""
     <style>
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
-    [data-testid="stSidebar"] .element-container { margin-bottom: -8px; }
     [data-testid="stSidebar"] label { font-size: 0.85rem !important; }
-    .block-container { padding-top: 1.5rem !important; }
-    ::placeholder { color: #aaaaaa !important; }
     .stCheckbox { margin-top: -15px; }
     </style>
     """, unsafe_allow_html=True)
@@ -35,54 +33,50 @@ def main():
         st.divider()
 
         st.subheader("📊 表示設定")
-        # 表示切替ボタン
         plot_mode = st.radio("表示パターン", ["実績を囲む（塗りつぶし）", "プロットを線でつなぐ"], index=0)
+        
+        # 塗りつぶしモードの時だけ、密着度（いびつさ）を調整できるようにする
+        alpha_mult = 1.0
+        if plot_mode == "実績を囲む（塗りつぶし）":
+            st.info("下のスライダーで『三日月』の凹み具合を調整できます")
+            alpha_mult = st.slider("エリアの密着度", 0.1, 5.0, 1.0, 0.1)
+        
         st.divider()
 
         st.subheader("🔍 1. 形態選択")
-        c1, c2 = st.columns([1, 2])
-        with c1: st.markdown("<div style='padding-top:8px;'>　形態</div>", unsafe_allow_html=True)
-        with c2:
-            type_list = ["小袋", "パウチ", "BIB", "スパウト"]
-            i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
+        type_list = ["小袋", "パウチ", "BIB", "スパウト"]
+        i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
         
         st.divider()
 
         st.subheader("📝 2. 条件設定")
         with st.form("sim_form"):
-            def input_row(label, placeholder_text=""):
+            def input_row(label):
                 c1, c2 = st.columns([1, 2])
                 with c1: st.markdown(f"<div style='padding-top:8px;'>{label}</div>", unsafe_allow_html=True)
-                with c2: return st.text_input(label, value="", placeholder=placeholder_text, label_visibility="collapsed")
-
-            i_weight = input_row("　重量/個", "単位：kg")
-            i_pcs = input_row("　入数", "単位：個")
-            i_sg = input_row("　比重", "0.000")
+                with c2: return st.text_input(label, label_visibility="collapsed")
+            i_weight = input_row("　重量/個")
+            i_pcs = input_row("　入数")
+            i_sg = input_row("　比重")
             calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True)
 
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 外箱サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
-    st.divider()
 
     if uploaded_file:
         try:
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
-            
             df_processed = process_product_data(df_raw)
             
             exclude_boxes = ["専用", "No,27", "HC21-3"]
             df_base = df_processed[
-                (df_processed["形態"] == i_type) & 
-                (df_processed["外箱"].notna()) &
-                (df_processed["外箱"].str.strip() != "") & 
-                (~df_processed["外箱"].isin(exclude_boxes))
+                (df_processed["形態"] == i_type) & (df_processed["外箱"].notna()) &
+                (df_processed["外箱"].str.strip() != "") & (~df_processed["外箱"].isin(exclude_boxes))
             ].copy()
 
             if not df_base.empty:
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
-                plot_spot = st.empty()
-                
                 selected_boxes = []
                 check_cols = st.columns(len(available_boxes)) 
                 for idx, box in enumerate(available_boxes):
@@ -103,65 +97,59 @@ def main():
                         if group.empty: continue
 
                         if plot_mode == "実績を囲む（塗りつぶし）":
-                            # 角度でソートして「面」を作る
-                            if len(group) >= 3:
-                                pts = group[["単一体積", "入数"]].values
-                                ctr = np.mean(pts, axis=0)
-                                angs = np.arctan2(pts[:,1] - ctr[1], pts[:,0] - ctr[0])
-                                sorted_pts = pts[np.argsort(angs)]
-                                sorted_pts = np.vstack([sorted_pts, sorted_pts[0]])
+                            if len(group) >= 4:
+                                points = group[["単一体積", "入数"]].values
+                                try:
+                                    # データスケールに合わせてAlphaを最適化
+                                    # alphashape(points, 0) は ConvexHull と同じになる
+                                    # 密度に応じて自動計算し、スライダーで微調整
+                                    alpha = alphashape.optimizealpha(points) * alpha_mult
+                                    shape = alphashape.alphashape(points, alpha)
 
-                                fig.add_trace(go.Scatter(
-                                    x=sorted_pts[:, 0], y=sorted_pts[:, 1],
-                                    fill='toself', fillcolor=color_map[box_type],
-                                    opacity=AREA_OPACITY,
-                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'),
-                                    name=box_type
-                                ))
+                                    if shape.geom_type == 'Polygon':
+                                        x_coords, y_coords = shape.exterior.xy
+                                        fig.add_trace(go.Scatter(
+                                            x=list(x_coords), y=list(y_coords),
+                                            fill='toself', fillcolor=color_map[box_type],
+                                            opacity=AREA_OPACITY,
+                                            line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'),
+                                            name=box_type
+                                        ))
+                                    elif shape.geom_type == 'MultiPolygon':
+                                        for poly in shape.geoms:
+                                            x_coords, y_coords = poly.exterior.xy
+                                            fig.add_trace(go.Scatter(
+                                                x=list(x_coords), y=list(y_coords),
+                                                fill='toself', fillcolor=color_map[box_type],
+                                                opacity=AREA_OPACITY,
+                                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'),
+                                                name=box_type, showlegend=False
+                                            ))
+                                except:
+                                    pass # 失敗時は描画しない（精度優先）
                         else:
-                            # プロットを体積順に線でつなぐ
                             sorted_group = group.sort_values("単一体積")
                             fig.add_trace(go.Scatter(
-                                x=sorted_group["単一体積"], 
-                                y=sorted_group["入数"],
-                                mode='lines+markers',
-                                marker=dict(size=MARKER_SIZE),
+                                x=sorted_group["単一体積"], y=sorted_group["入数"],
+                                mode='lines+markers', marker=dict(size=MARKER_SIZE),
                                 line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                name=box_type,
-                                text=sorted_group["製品名"],
-                                hovertemplate="<b>%{text}</b><br>体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
+                                name=box_type
                             ))
 
-                # ターゲット（星）の描画
+                # ターゲット描画（略）
                 if i_weight and i_sg and i_pcs:
                     try:
-                        sim_unit_vol = float(i_weight) / float(i_sg)
-                        sim_pcs = float(i_pcs)
-                        fig.add_trace(go.Scatter(
-                            x=[sim_unit_vol], y=[sim_pcs],
-                            mode='markers',
-                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', 
-                                        line=dict(width=2, color='white')),
-                            name='ターゲット'
-                        ))
+                        sv, sp = float(i_weight)/float(i_sg), float(i_pcs)
+                        fig.add_trace(go.Scatter(x=[sv], y=[sp], mode='markers',
+                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', line=dict(width=2, color='white')),
+                            name='ターゲット'))
                     except: pass
 
-                fig.update_layout(
-                    template="plotly_white", height=600,
-                    xaxis_title="1個あたりの体積 (重量/比重)",
-                    yaxis_title="入数 [個]",
-                    xaxis=dict(rangemode="tozero", zeroline=True, zerolinewidth=2, zerolinecolor='lightgrey'),
-                    yaxis=dict(rangemode="tozero", zeroline=True, zerolinewidth=2, zerolinecolor='lightgrey'),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                
-                plot_spot.plotly_chart(fig, use_container_width=True)
-
-                st.divider()
-                st.subheader("📊 実績データ一覧")
-                st.dataframe(df_display, use_container_width=True, height=500)
-            else:
-                st.warning(f"「{i_type}」に該当するデータがありません。")
+                fig.update_layout(template="plotly_white", height=600,
+                    xaxis_title="1個あたりの体積 (重量/比重)", yaxis_title="入数 [個]",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                st.plotly_chart(fig, use_container_width=True)
+                st.dataframe(df_display, use_container_width=True)
         except Exception as e:
             st.error(f"エラー: {e}")
     else:
