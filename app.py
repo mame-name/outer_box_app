@@ -10,10 +10,10 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-AREA_LINE_WIDTH = 2        # エリア外周の線幅
-AREA_OPACITY = 0.2         # エリア内の塗りつぶし透明度
-MARKER_SIZE = 8            # プロットパターンの点サイズ
-SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
+AREA_LINE_WIDTH = 2        
+AREA_OPACITY = 0.3         
+MARKER_SIZE = 8            
+SIM_MARKER_SIZE = 18       
 # ==========================================
 
 # CSS: スタイル調整
@@ -35,7 +35,6 @@ def main():
         st.divider()
 
         st.subheader("📊 表示設定")
-        # 表示切替ボタン
         plot_mode = st.radio("表示パターン", ["実績を囲む（エリア）", "全てのプロット（点）"], index=0)
         st.divider()
 
@@ -99,26 +98,30 @@ def main():
 
                 if not plot_data.empty:
                     if plot_mode == "実績を囲む（エリア）":
-                        # エリア表示モード
                         for box_type in selected_boxes:
                             group = plot_data[plot_data["外箱"] == box_type]
-                            if len(group) >= 3:
-                                points = group[["単一体積", "入数"]].values
-                                center = np.mean(points, axis=0)
-                                angles = np.arctan2(points[:,1] - center[1], points[:,0] - center[0])
-                                sorted_indices = np.argsort(angles)
-                                sorted_points = points[sorted_indices]
-                                sorted_points = np.vstack([sorted_points, sorted_points[0]])
+                            if len(group) >= 2:
+                                # 【新ロジック】体積ごとに最大・最小を抽出して縁（ふち）を作る
+                                # 同じ体積のデータがある場合に備えて集約
+                                upper_edge = group.groupby("単一体積")["入数"].max().reset_index()
+                                lower_edge = group.groupby("単一体積")["入数"].min().reset_index()
+                                
+                                # 上端を左→右へ、下端を右→左へ繋ぐことで一周させる
+                                x_path = list(upper_edge["単一体積"]) + list(lower_edge["単一体積"])[::-1]
+                                y_path = list(upper_edge["入数"]) + list(lower_edge["入数"])[::-1]
+                                
+                                # 最初の点に戻って閉じる
+                                x_path.append(x_path[0])
+                                y_path.append(y_path[0])
 
                                 fig.add_trace(go.Scatter(
-                                    x=sorted_points[:, 0], y=sorted_points[:, 1],
+                                    x=x_path, y=y_path,
                                     fill='toself', fillcolor=color_map[box_type],
                                     opacity=AREA_OPACITY,
-                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'),
+                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
                                     name=box_type, hoverinfo='name'
                                 ))
                     else:
-                        # 全プロット表示モード（元々のpx.scatterに近い形）
                         for box_type in selected_boxes:
                             group = plot_data[plot_data["外箱"] == box_type]
                             fig.add_trace(go.Scatter(
@@ -130,7 +133,7 @@ def main():
                                 hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
-                # ターゲット（星）の描画
+                # ターゲット描画
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
@@ -154,7 +157,6 @@ def main():
                 )
                 
                 plot_spot.plotly_chart(fig, use_container_width=True)
-
                 st.divider()
                 st.subheader("📊 実績データ一覧")
                 st.dataframe(df_display, use_container_width=True, height=500)
@@ -167,3 +169,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
