@@ -10,6 +10,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
+SPAN_N = 3                 # ★ここを調整：何個下の実績と繋ぐか（40個→30個など）
 AREA_LINE_WIDTH = 2        
 AREA_OPACITY = 0.3         
 MARKER_SIZE = 8            
@@ -64,15 +65,13 @@ def main():
 
     if uploaded_file:
         try:
-            # --- 1. データクリーニング・前処理の復活 ---
+            # --- 1. データクリーニング・前処理 ---
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
             
-            # 外部ファイルの処理ロジックを適用
             df_processed = process_product_data(df_raw)
             
-            # 特定の箱や不正データの除外
             exclude_boxes = ["専用", "No,27", "HC21-3"]
             df_base = df_processed[
                 (df_processed["形態"] == i_type) & 
@@ -85,7 +84,6 @@ def main():
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
                 plot_spot = st.empty()
                 
-                # 箱選択チェックボックスの生成
                 selected_boxes = []
                 check_cols = st.columns(len(available_boxes)) 
                 for idx, box in enumerate(available_boxes):
@@ -106,16 +104,32 @@ def main():
                         if len(group) < 1: continue
 
                         if plot_mode == "実績を囲む（エリア）":
-                            # --- 2. 考案いただいた新ロジック：入数ごとの左右端を繋ぐ ---
-                            # 入数ごとにxの最小・最大を抽出
+                            # --- 2. 新ロジック：N個下の点と直接結んで厚みを作る ---
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
-                            stats = stats.sort_values("入数") # 入数が少ない順に並べる
+                            stats = stats.sort_values("入数", ascending=False) # 入数が多い順(40個→10個)
 
-                            # 右側の縁（下から上へ）＋ 左側の縁（上から下へ戻る）
-                            x_coords = stats['max'].tolist() + stats['min'].tolist()[::-1]
-                            y_coords = stats['入数'].tolist() + stats['入数'].tolist()[::-1]
-                            
-                            # 完全に図形を閉じる
+                            x_coords = []
+                            y_coords = []
+
+                            # 右側（最大値）のパス生成：i番目と i+SPAN_N番目を結びながら下りる
+                            for i in range(len(stats)):
+                                curr = stats.iloc[i]
+                                target_idx = min(i + SPAN_N, len(stats) - 1)
+                                target = stats.iloc[target_idx]
+                                
+                                x_coords.extend([curr['max'], target['max']])
+                                y_coords.extend([curr['入数'], target['入数']])
+
+                            # 左側（最小値）のパス生成：下から上へ戻る
+                            for i in range(len(stats)-1, -1, -1):
+                                curr = stats.iloc[i]
+                                target_idx = max(i - SPAN_N, 0)
+                                target = stats.iloc[target_idx]
+                                
+                                x_coords.extend([curr['min'], target['min']])
+                                y_coords.extend([curr['入数'], target['入数']])
+
+                            # 完全に閉じる
                             x_coords.append(x_coords[0])
                             y_coords.append(y_coords[0])
 
@@ -124,13 +138,12 @@ def main():
                                 fill='toself', 
                                 fillcolor=color_map[box_type],
                                 mode='lines',
-                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
                                 opacity=AREA_OPACITY,
                                 name=box_type,
                                 hoverinfo='name'
                             ))
                         else:
-                            # 点表示モード（ホバー情報あり）
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
                                 mode='markers',
@@ -176,4 +189,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
