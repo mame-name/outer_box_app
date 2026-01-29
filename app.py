@@ -10,8 +10,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-SPAN_N = 3                 # 1〜N個下のすべてと繋いで範囲を埋めます
-AREA_LINE_WIDTH = 1.0      
+AREA_LINE_WIDTH = 1.5      
 AREA_OPACITY = 0.3         
 MARKER_SIZE = 8            
 SIM_MARKER_SIZE = 18       
@@ -106,37 +105,35 @@ def main():
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
                             stats = stats.sort_values("入数", ascending=False) # 入数大→小
 
-                            right_x, right_y = [], []
-                            left_x, left_y = [], []
+                            # パスを格納するリスト
+                            full_x = []
+                            full_y = []
 
-                            # 右側の壁：上から順に
+                            # 1. 右側の壁（最大値）：上から下へ「1個下」と結びながら進む
                             for i in range(len(stats)):
                                 curr = stats.iloc[i]
-                                right_x.append(curr['max'])
-                                right_y.append(curr['入数'])
-                                # 1〜SPAN_N個下まで全部繋ぐ
-                                for n in range(1, SPAN_N + 1):
-                                    target_idx = i + n
-                                    if target_idx < len(stats):
-                                        target = stats.iloc[target_idx]
-                                        right_x.extend([curr['max'], target['max']])
-                                        right_y.extend([curr['入数'], target['入数']])
+                                full_x.append(curr['max'])
+                                full_y.append(curr['入数'])
+                                # 1個下があれば、そこまでの垂直・斜め線を繋ぐ
+                                if i + 1 < len(stats):
+                                    next_p = stats.iloc[i + 1]
+                                    full_x.append(next_p['max'])
+                                    full_y.append(next_p['入数'])
 
-                            # 左側の壁：下から順に
+                            # 2. 左側の壁（最小値）：下から上へ「1個上」と結びながら戻る
                             for i in range(len(stats)-1, -1, -1):
                                 curr = stats.iloc[i]
-                                left_x.append(curr['min'])
-                                left_y.append(curr['入数'])
-                                # 1〜SPAN_N個上まで全部繋ぐ
-                                for n in range(1, SPAN_N + 1):
-                                    target_idx = i - n
-                                    if target_idx >= 0: # ここで範囲外をガード
-                                        target = stats.iloc[target_idx]
-                                        left_x.extend([curr['min'], target['min']])
-                                        left_y.extend([curr['入数'], target['入数']])
+                                full_x.append(curr['min'])
+                                full_y.append(curr['入数'])
+                                # 1個上があれば、そこまでの線を繋ぐ
+                                if i - 1 >= 0:
+                                    prev_p = stats.iloc[i - 1]
+                                    full_x.append(prev_p['min'])
+                                    full_y.append(prev_p['入数'])
 
-                            full_x = right_x + left_x + [right_x[0]]
-                            full_y = right_y + left_y + [right_y[0]]
+                            # 完全に閉じる
+                            full_x.append(full_x[0])
+                            full_y.append(full_y[0])
 
                             fig.add_trace(go.Scatter(
                                 x=full_x, y=full_y,
@@ -158,6 +155,7 @@ def main():
                                 hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
+                # --- ターゲット（星） ---
                 if i_weight and i_sg and i_pcs:
                     try:
                         sv, sp = float(i_weight) / float(i_sg), float(i_pcs)
