@@ -10,7 +10,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 # グラフの表示詳細設定
 # ==========================================
-SPAN_N = 3                 # ★1〜3個下のすべてと繋いで範囲を埋めます
+SPAN_N = 3                 # 1〜N個下のすべてと繋いで範囲を埋めます
 AREA_LINE_WIDTH = 1.0      
 AREA_OPACITY = 0.3         
 MARKER_SIZE = 8            
@@ -109,10 +109,12 @@ def main():
                             right_x, right_y = [], []
                             left_x, left_y = [], []
 
-                            # --- 改良：1からSPAN_N個下までのすべての点と結ぶ ---
-                            # 右側の壁
+                            # 右側の壁：上から順に
                             for i in range(len(stats)):
                                 curr = stats.iloc[i]
+                                right_x.append(curr['max'])
+                                right_y.append(curr['入数'])
+                                # 1〜SPAN_N個下まで全部繋ぐ
                                 for n in range(1, SPAN_N + 1):
                                     target_idx = i + n
                                     if target_idx < len(stats):
@@ -120,15 +122,18 @@ def main():
                                         right_x.extend([curr['max'], target['max']])
                                         right_y.extend([curr['入数'], target['入数']])
 
-                            # 左側の壁（逆順）
+                            # 左側の壁：下から順に
                             for i in range(len(stats)-1, -1, -1):
                                 curr = stats.iloc[i]
+                                left_x.append(curr['min'])
+                                left_y.append(curr['入数'])
+                                # 1〜SPAN_N個上まで全部繋ぐ
                                 for n in range(1, SPAN_N + 1):
                                     target_idx = i - n
-                                    if target_idx >= 0:
+                                    if target_idx >= 0: # ここで範囲外をガード
                                         target = stats.iloc[target_idx]
                                         left_x.extend([curr['min'], target['min']])
-                                        left_y.extend([curr['入_数'], target['入数']])
+                                        left_y.extend([curr['入数'], target['入数']])
 
                             full_x = right_x + left_x + [right_x[0]]
                             full_y = right_y + left_y + [right_y[0]]
