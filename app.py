@@ -97,33 +97,38 @@ def main():
                 color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
                 if not plot_data.empty:
-                    if plot_mode == "実績を囲む（エリア）":
-                        for box_type in selected_boxes:
-                            group = plot_data[plot_data["外箱"] == box_type].sort_values("単一体積")
-                            if len(group) >= 2:
-                                # 体積ごとの最大・最小を抽出
-                                upper_edge = group.groupby("単一体積")["入数"].max().reset_index()
-                                lower_edge = group.groupby("単一体積")["入数"].min().reset_index()
-                                
-                                # 時計回りに点を結合（上端を右へ、下端を左へ戻る）
-                                x_coords = list(upper_edge["単一体積"]) + list(lower_edge["単一体積"])[::-1]
-                                y_coords = list(upper_edge["入数"]) + list(lower_edge["入数"])[::-1]
-                                
-                                # 塗りつぶしを有効化（modeを'lines'に限定せずfillを指定）
-                                fig.add_trace(go.Scatter(
-                                    x=x_coords, 
-                                    y=y_coords,
-                                    fill='toself', 
-                                    fillcolor=color_map[box_type],
-                                    mode='lines',
-                                    line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                    opacity=AREA_OPACITY,
-                                    name=box_type,
-                                    hoverinfo='name'
-                                ))
-                    else:
-                        for box_type in selected_boxes:
-                            group = plot_data[plot_data["外箱"] == box_type]
+                    for box_type in selected_boxes:
+                        group = plot_data[plot_data["外箱"] == box_type]
+                        if len(group) < 2: continue
+
+                        if plot_mode == "実績を囲む（エリア）":
+                            # --- 上下の縁（エンベロープ）を計算 ---
+                            # 体積(x)でソート
+                            sorted_group = group.sort_values("単一体積")
+                            # xごとの最大y(上端)と最小y(下端)を取得
+                            upper = sorted_group.groupby("単一体積")["入数"].max().reset_index()
+                            lower = sorted_group.groupby("単一体積")["入数"].min().reset_index()
+                            
+                            # 右へ進む上端ルート + 左へ戻る下端ルート
+                            x_path = list(upper["単一体積"]) + list(lower["単一体積"])[::-1]
+                            y_path = list(upper["入数"]) + list(lower["入数"])[::-1]
+                            
+                            # 完全に閉じるために始点を末尾に追加
+                            x_path.append(x_path[0])
+                            y_path.append(y_path[0])
+
+                            fig.add_trace(go.Scatter(
+                                x=x_path, y=y_path,
+                                fill='toself', 
+                                fillcolor=color_map[box_type],
+                                mode='lines', # 線を表示しつつ
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
+                                opacity=AREA_OPACITY,
+                                name=box_type,
+                                hoverinfo='name'
+                            ))
+                        else:
+                            # 点表示モード
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
                                 mode='markers',
@@ -136,23 +141,18 @@ def main():
                 # ターゲット描画
                 if i_weight and i_sg and i_pcs:
                     try:
-                        sim_unit_vol = float(i_weight) / float(i_sg)
-                        sim_pcs = float(i_pcs)
-                        fig.add_trace(go.Scatter(
-                            x=[sim_unit_vol], y=[sim_pcs],
-                            mode='markers',
-                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', 
-                                        line=dict(width=2, color='white')),
-                            name='ターゲット'
-                        ))
+                        sv, sp = float(i_weight)/float(i_sg), float(i_pcs)
+                        fig.add_trace(go.Scatter(x=[sv], y=[sp], mode='markers',
+                            marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', line=dict(width=2, color='white')),
+                            name='ターゲット'))
                     except: pass
 
                 fig.update_layout(
                     template="plotly_white", height=600,
                     xaxis_title="1個あたりの体積 (重量/比重)",
                     yaxis_title="入数 [個]",
-                    xaxis=dict(rangemode="tozero", zeroline=True, zerolinewidth=2, zerolinecolor='lightgrey'),
-                    yaxis=dict(rangemode="tozero", zeroline=True, zerolinewidth=2, zerolinecolor='lightgrey'),
+                    xaxis=dict(rangemode="tozero", zeroline=True),
+                    yaxis=dict(rangemode="tozero", zeroline=True),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
                 
