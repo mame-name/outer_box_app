@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 import alphashape  # 凹包（いびつな外周）計算用
+from scipy.spatial import ConvexHull  # フォールバック用
 from calc import process_product_data
 
 st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
@@ -14,7 +15,6 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 AREA_LINE_WIDTH = 2        # エリア外周の線幅
 AREA_OPACITY = 0.3         # エリア内の塗りつぶし透明度
 SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
-ALPHA_VALUE = 2.0          # ★形状の「攻め具合」。数値が大きいほどデータに密着（いびつ）し、0だと直線的になります。
 # ==========================================
 
 # CSS: スタイル調整
@@ -98,38 +98,48 @@ def main():
                     for box_type in selected_boxes:
                         group = plot_data[plot_data["外箱"] == box_type]
                         
-                        # 4点以上ある場合にいびつな外周（Alpha Shape）を計算
-                        if len(group) >= 4:
+                        # 3点以上あれば描画
+                        if len(group) >= 3:
                             points = group[["単一体積", "入数"]].values
                             try:
-                                # Alpha Shapeの計算
-                                alpha_shape = alphashape.alphashape(points, ALPHA_VALUE)
+                                # Alpha Shapeを自動計算
+                                alpha_shape = alphashape.alphashape(points)
                                 
-                                # 形状がPolygon（単一の閉じた図形）の場合のみ描画
-                                if alpha_shape.geom_type == 'Polygon':
-                                    x_coords, y_coords = alpha_shape.exterior.xy
-                                    fig.add_trace(go.Scatter(
-                                        x=list(x_coords), y=list(y_coords),
-                                        fill='toself', 
-                                        fillcolor=color_map[box_type],
-                                        opacity=AREA_OPACITY,
-                                        line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                        name=box_type,
-                                        hoverinfo='name'
-                                    ))
-                                elif alpha_shape.geom_type == 'MultiPolygon':
-                                    # データが離れすぎている場合に複数の図形に分かれる場合
-                                    for poly in alpha_shape.geoms:
-                                        x_coords, y_coords = poly.exterior.xy
+                                # 正常にポリゴンが生成されたかチェック
+                                if hasattr(alpha_shape, 'geom_type') and alpha_shape.geom_type in ['Polygon', 'MultiPolygon']:
+                                    if alpha_shape.geom_type == 'Polygon':
+                                        x_coords, y_coords = alpha_shape.exterior.xy
                                         fig.add_trace(go.Scatter(
                                             x=list(x_coords), y=list(y_coords),
                                             fill='toself', fillcolor=color_map[box_type],
                                             opacity=AREA_OPACITY,
                                             line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
-                                            name=box_type, showlegend=False, hoverinfo='skip'
+                                            name=box_type, hoverinfo='name'
                                         ))
-                            except Exception as e:
-                                pass # 計算不能な場合は描画しない
+                                    else: # MultiPolygon（複数の塊に分かれた場合）
+                                        for poly in alpha_shape.geoms:
+                                            x_coords, y_coords = poly.exterior.xy
+                                            fig.add_trace(go.Scatter(
+                                                x=list(x_coords), y=list(y_coords),
+                                                fill='toself', fillcolor=color_map[box_type],
+                                                opacity=AREA_OPACITY,
+                                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                                name=box_type, showlegend=False, hoverinfo='skip'
+                                            ))
+                                else:
+                                    # Alpha Shapeが計算できない場合はConvexHull（凸包）で代用
+                                    hull = ConvexHull(points)
+                                    hull_points = points[np.append(hull.vertices, hull.vertices[0])]
+                                    fig.add_trace(go.Scatter(
+                                        x=hull_points[:, 0], y=hull_points[:, 1],
+                                        fill='toself', fillcolor=color_map[box_type],
+                                        opacity=AREA_OPACITY,
+                                        line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
+                                        name=box_type, hoverinfo='name'
+                                    ))
+                            except Exception:
+                                # 計算エラー時は表示をスキップ
+                                pass
 
                 # ターゲットの描画
                 if i_weight and i_sg and i_pcs:
