@@ -3,7 +3,7 @@ import pandas as pd
 def process_product_data(df):
     df = df.copy()
 
-    # 1. 製品コード 000000 形式
+    # 1. 製品コード 000000 形式（文字列として扱う）
     def format_code(x):
         if pd.isna(x) or x == "": return ""
         try:
@@ -18,7 +18,7 @@ def process_product_data(df):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # 3. 単一体積（1個あたり）の作成 (重量 / 比重)
+    # 3. 単一体積（1個あたり）の計算: 重量 / 比重
     def calc_unit_volume(row):
         try:
             w = float(row['重量（個）'])
@@ -36,16 +36,4 @@ def process_product_data(df):
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace('nan', '').str.strip()
 
-    # 5. 製品サイズの分解
-    def split_size(size_str):
-        if '*' in size_str:
-            parts = size_str.split('*')
-            try:
-                return float(parts[0]), float(parts[1])
-            except:
-                return None, None
-        return None, None
-
-    df[['巾', '長さ']] = df.apply(lambda row: pd.Series(split_size(row['製品サイズ'])), axis=1)
-    
-    return df df
+    return df
