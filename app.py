@@ -47,8 +47,9 @@ def main():
             calc_submit = st.form_submit_button("シミュレーション実行", use_container_width=True)
 
     # --- メイン画面：スクロールエリア ---
-    st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: gray;'>🤖 小袋サイズ確認シミュレーター</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 小袋サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray;'>まるで熊谷さんが考えたような精度で箱のサイズを考えてくれるアプリです</p>", unsafe_allow_html=True)
+    st.markdown("---")
     st.divider()
 
     if uploaded_file:
