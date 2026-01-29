@@ -12,9 +12,9 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # グラフの表示詳細設定
 # ==========================================
 AREA_LINE_WIDTH = 2
-AREA_OPACITY = 0.2
-MARKER_SIZE = 8
-SIM_MARKER_SIZE = 18
+AREA_OPACITY = 0.25        # 塗りつぶしの透明度（少し濃いめに設定）
+MARKER_SIZE = 6            # 実績点のサイズ
+SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
 # ==========================================
 
 # CSS: スタイル調整
@@ -23,6 +23,7 @@ st.markdown("""
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
     [data-testid="stSidebar"] label { font-size: 0.85rem !important; }
     .stCheckbox { margin-top: -15px; }
+    .block-container { padding-top: 1.5rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -35,11 +36,11 @@ def main():
         st.subheader("📊 表示設定")
         plot_mode = st.radio("表示パターン", ["実績を囲む（塗りつぶし）", "プロットを線でつなぐ"], index=0)
         
-        # 塗りつぶしモードの時だけ、密着度（いびつさ）を調整できるようにする
+        # 密着度調整用の隠し味スライダー
         alpha_mult = 1.0
         if plot_mode == "実績を囲む（塗りつぶし）":
-            st.info("下のスライダーで『三日月』の凹み具合を調整できます")
-            alpha_mult = st.slider("エリアの密着度", 0.1, 5.0, 1.0, 0.1)
+            st.info("💡 数値を上げると赤丸部分の余白が削られ、実績に密着します。")
+            alpha_mult = st.slider("エリアの密着度（凹み具合）", 0.1, 5.0, 1.2, 0.1)
         
         st.divider()
 
@@ -97,37 +98,42 @@ def main():
                         if group.empty: continue
 
                         if plot_mode == "実績を囲む（塗りつぶし）":
-                            if len(group) >= 4:
+                            if len(group) >= 3:
                                 points = group[["単一体積", "入数"]].values
                                 try:
-                                    # データスケールに合わせてAlphaを最適化
-                                    # alphashape(points, 0) は ConvexHull と同じになる
-                                    # 密度に応じて自動計算し、スライダーで微調整
-                                    alpha = alphashape.optimizealpha(points) * alpha_mult
-                                    shape = alphashape.alphashape(points, alpha)
+                                    # --- 精度向上のための動的Alpha計算 ---
+                                    # optimizealphaで基礎値を出し、スライダー(alpha_mult)で攻め具合を調整
+                                    base_alpha = alphashape.optimizealpha(points)
+                                    target_alpha = base_alpha * alpha_mult
+                                    shape = alphashape.alphashape(points, target_alpha)
 
-                                    if shape.geom_type == 'Polygon':
-                                        x_coords, y_coords = shape.exterior.xy
+                                    # もし「攻めすぎ」て図形が消えた場合、少し緩めて再試行（最大3回）
+                                    for _ in range(3):
+                                        if shape.geom_type in ['Polygon', 'MultiPolygon']:
+                                            break
+                                        target_alpha *= 0.7
+                                        shape = alphashape.alphashape(points, target_alpha)
+
+                                    # 描画処理
+                                    def add_poly(poly, show_legend=True):
+                                        x_coords, y_coords = poly.exterior.xy
                                         fig.add_trace(go.Scatter(
                                             x=list(x_coords), y=list(y_coords),
                                             fill='toself', fillcolor=color_map[box_type],
                                             opacity=AREA_OPACITY,
-                                            line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'),
-                                            name=box_type
+                                            # linearにすることで「勝手な膨らみ」を抑止
+                                            line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='linear'),
+                                            name=box_type, showlegend=show_legend, hoverinfo='name'
                                         ))
+
+                                    if shape.geom_type == 'Polygon':
+                                        add_poly(shape)
                                     elif shape.geom_type == 'MultiPolygon':
-                                        for poly in shape.geoms:
-                                            x_coords, y_coords = poly.exterior.xy
-                                            fig.add_trace(go.Scatter(
-                                                x=list(x_coords), y=list(y_coords),
-                                                fill='toself', fillcolor=color_map[box_type],
-                                                opacity=AREA_OPACITY,
-                                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'),
-                                                name=box_type, showlegend=False
-                                            ))
-                                except:
-                                    pass # 失敗時は描画しない（精度優先）
+                                        for i, p in enumerate(shape.geoms):
+                                            add_poly(p, show_legend=(i == 0))
+                                except: pass
                         else:
+                            # プロットを線でつなぐモード
                             sorted_group = group.sort_values("単一体積")
                             fig.add_trace(go.Scatter(
                                 x=sorted_group["単一体積"], y=sorted_group["入数"],
@@ -136,7 +142,7 @@ def main():
                                 name=box_type
                             ))
 
-                # ターゲット描画（略）
+                # ターゲット描画（星）
                 if i_weight and i_sg and i_pcs:
                     try:
                         sv, sp = float(i_weight)/float(i_sg), float(i_pcs)
@@ -147,9 +153,14 @@ def main():
 
                 fig.update_layout(template="plotly_white", height=600,
                     xaxis_title="1個あたりの体積 (重量/比重)", yaxis_title="入数 [個]",
+                    xaxis=dict(rangemode="tozero", zeroline=True),
+                    yaxis=dict(rangemode="tozero", zeroline=True),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                
                 st.plotly_chart(fig, use_container_width=True)
                 st.dataframe(df_display, use_container_width=True)
+            else:
+                st.warning(f"「{i_type}」に該当するデータがありません。")
         except Exception as e:
             st.error(f"エラー: {e}")
     else:
