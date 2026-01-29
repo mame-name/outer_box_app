@@ -29,10 +29,10 @@ def main():
         # 形態とセレクトボックスを横並びに配置
         c1, c2 = st.columns([1, 2])
         with c1: 
-            st.markdown("<div style='padding-top:8px;'>形態</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding-top:8px;'>　形態</div>", unsafe_allow_html=True)
         with c2:
             type_list = ["小袋", "パウチ", "BIB", "スパウト"]
-            i_type = st.selectbox("　形態", type_list, label_visibility="collapsed")
+            i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
             
         btn_filter = st.button("グラフを表示", use_container_width=True)
         
