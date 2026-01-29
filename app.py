@@ -32,9 +32,9 @@ def main():
             st.markdown("<div style='padding-top:8px;'>形態</div>", unsafe_allow_html=True)
         with c2:
             type_list = ["小袋", "パウチ", "BIB", "スパウト"]
-            i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
+            i_type = st.selectbox("　形態", type_list, label_visibility="collapsed")
             
-        btn_filter = st.button("形態で絞ってグラフを表示", use_container_width=True)
+        btn_filter = st.button("グラフを表示", use_container_width=True)
         
         st.divider()
 
@@ -47,11 +47,11 @@ def main():
                 with c2: return st.text_input(label, value="", placeholder=placeholder_text, label_visibility="collapsed")
 
             # 重量、入数、比重を横並び形式で配置
-            i_weight = input_row("重量（個）", "単位：kg")
-            i_pcs = input_row("入数", "単位：個")
-            i_sg = input_row("比重", "0.000")
+            i_weight = input_row("　重量/個", "単位：kg")
+            i_pcs = input_row("　入数", "単位：個")
+            i_sg = input_row("　比重", "0.000")
             
-            calc_submit = st.form_submit_button("シミュレーション結果をグラフにプロット", use_container_width=True)
+            calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True)
 
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 外箱サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
     st.divider()
