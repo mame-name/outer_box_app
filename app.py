@@ -12,7 +12,7 @@ st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ"
 # ==========================================
 AREA_LINE_WIDTH = 2        # エリア外周の線幅
 AREA_OPACITY = 0.2         # エリア内の塗りつぶし透明度
-MARKER_SIZE = 8            # プロットパターンの点サイズ
+MARKER_SIZE = 8            # プロットの点サイズ
 SIM_MARKER_SIZE = 18       # ターゲット（星）のサイズ
 # ==========================================
 
@@ -36,7 +36,7 @@ def main():
 
         st.subheader("📊 表示設定")
         # 表示切替ボタン
-        plot_mode = st.radio("表示パターン", ["実績を囲む（エリア）", "全てのプロット（点）"], index=0)
+        plot_mode = st.radio("表示パターン", ["実績を囲む（塗りつぶし）", "プロットを線でつなぐ"], index=0)
         st.divider()
 
         st.subheader("🔍 1. 形態選択")
@@ -98,36 +98,38 @@ def main():
                 color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
                 if not plot_data.empty:
-                    if plot_mode == "実績を囲む（エリア）":
-                        # エリア表示モード
-                        for box_type in selected_boxes:
-                            group = plot_data[plot_data["外箱"] == box_type]
+                    for box_type in selected_boxes:
+                        group = plot_data[plot_data["外箱"] == box_type]
+                        if group.empty: continue
+
+                        if plot_mode == "実績を囲む（塗りつぶし）":
+                            # 角度でソートして「面」を作る
                             if len(group) >= 3:
-                                points = group[["単一体積", "入数"]].values
-                                center = np.mean(points, axis=0)
-                                angles = np.arctan2(points[:,1] - center[1], points[:,0] - center[0])
-                                sorted_indices = np.argsort(angles)
-                                sorted_points = points[sorted_indices]
-                                sorted_points = np.vstack([sorted_points, sorted_points[0]])
+                                pts = group[["単一体積", "入数"]].values
+                                ctr = np.mean(pts, axis=0)
+                                angs = np.arctan2(pts[:,1] - ctr[1], pts[:,0] - ctr[0])
+                                sorted_pts = pts[np.argsort(angs)]
+                                sorted_pts = np.vstack([sorted_pts, sorted_pts[0]])
 
                                 fig.add_trace(go.Scatter(
-                                    x=sorted_points[:, 0], y=sorted_points[:, 1],
+                                    x=sorted_pts[:, 0], y=sorted_pts[:, 1],
                                     fill='toself', fillcolor=color_map[box_type],
                                     opacity=AREA_OPACITY,
                                     line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH, shape='spline'),
-                                    name=box_type, hoverinfo='name'
+                                    name=box_type
                                 ))
-                    else:
-                        # 全プロット表示モード（元々のpx.scatterに近い形）
-                        for box_type in selected_boxes:
-                            group = plot_data[plot_data["外箱"] == box_type]
+                        else:
+                            # プロットを体積順に線でつなぐ
+                            sorted_group = group.sort_values("単一体積")
                             fig.add_trace(go.Scatter(
-                                x=group["単一体積"], y=group["入数"],
-                                mode='markers',
-                                marker=dict(size=MARKER_SIZE, color=color_map[box_type]),
+                                x=sorted_group["単一体積"], 
+                                y=sorted_group["入数"],
+                                mode='lines+markers',
+                                marker=dict(size=MARKER_SIZE),
+                                line=dict(color=color_map[box_type], width=AREA_LINE_WIDTH),
                                 name=box_type,
-                                text=group["製品名"],
-                                hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
+                                text=sorted_group["製品名"],
+                                hovertemplate="<b>%{text}</b><br>体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
                 # ターゲット（星）の描画
