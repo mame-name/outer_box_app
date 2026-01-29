@@ -16,7 +16,7 @@ MARKER_SIZE = 8
 SIM_MARKER_SIZE = 18       
 # ==========================================
 
-# CSS: スタイル調整（サイドバーなどの見た目を整える）
+# CSS: スタイル調整
 st.markdown("""
     <style>
     [data-testid="stSidebar"] .stForm { border: none; padding: 0; }
@@ -36,6 +36,13 @@ def main():
 
         st.subheader("📊 表示設定")
         plot_mode = st.radio("表示パターン", ["実績を囲む（エリア）", "全てのプロット（点）"], index=0)
+        
+        # --- 追加：エリアの接続スパン調整 ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.subheader("📐 エリアの厚み調整")
+        span_n = st.slider("接続スパン（N個下の入数と結合）", min_value=1, max_value=10, value=3)
+        st.info(f"現在の設定：各入数の実績を、{span_n}つ下の入数の実績と繋いでエリアを作ります。")
+        
         st.divider()
 
         st.subheader("🔍 1. 形態選択")
@@ -64,15 +71,13 @@ def main():
 
     if uploaded_file:
         try:
-            # --- 1. データクリーニング・前処理の復活 ---
+            # データ読込とクリーニング
             target_indices = [0, 1, 2, 3, 5, 6, 8, 9, 15, 26]
             col_names = ["製品コード", "製品名", "荷姿", "形態", "重量（個）", "入数", "重量（箱）", "比重", "外箱", "製品サイズ"]
             df_raw = pd.read_excel(uploaded_file, sheet_name="製品一覧", usecols=target_indices, names=col_names, skiprows=5, engine='openpyxl')
             
-            # 外部ファイルの処理ロジックを適用
             df_processed = process_product_data(df_raw)
             
-            # 特定の箱や不正データの除外
             exclude_boxes = ["専用", "No,27", "HC21-3"]
             df_base = df_processed[
                 (df_processed["形態"] == i_type) & 
@@ -85,7 +90,6 @@ def main():
                 available_boxes = sorted(df_base["外箱"].unique().tolist())
                 plot_spot = st.empty()
                 
-                # 箱選択チェックボックスの生成
                 selected_boxes = []
                 check_cols = st.columns(len(available_boxes)) 
                 for idx, box in enumerate(available_boxes):
@@ -106,21 +110,38 @@ def main():
                         if len(group) < 1: continue
 
                         if plot_mode == "実績を囲む（エリア）":
-                            # --- 2. 考案いただいた新ロジック：入数ごとの左右端を繋ぐ ---
-                            # 入数ごとにxの最小・最大を抽出
+                            # 【改良ロジック】N個下の入数と最大・最小を繋ぐ
                             stats = group.groupby("入数")["単一体積"].agg(['min', 'max']).reset_index()
-                            stats = stats.sort_values("入数") # 入数が少ない順に並べる
-
-                            # 右側の縁（下から上へ）＋ 左側の縁（上から下へ戻る）
-                            x_coords = stats['max'].tolist() + stats['min'].tolist()[::-1]
-                            y_coords = stats['入数'].tolist() + stats['入数'].tolist()[::-1]
+                            stats = stats.sort_values("入数", ascending=False) # 入数が多い順
                             
-                            # 完全に図形を閉じる
-                            x_coords.append(x_coords[0])
-                            y_coords.append(y_coords[0])
+                            x_path = []
+                            y_path = []
+
+                            # 右端（最大体積）を上から下へ辿る
+                            for i in range(len(stats)):
+                                curr = stats.iloc[i]
+                                x_path.append(curr['max'])
+                                y_path.append(curr['入数'])
+                                # N個下の実績があれば、その入数まで垂直に繋ぐ（階段状にするため）
+                                next_idx = i + span_n if i + span_n < len(stats) else len(stats) - 1
+                                target_next = stats.iloc[next_idx]
+                                x_path.append(curr['max'])
+                                y_path.append(target_next['入数'])
+
+                            # 左端（最小体積）を下から上へ戻る
+                            for i in range(len(stats)-1, -1, -1):
+                                curr = stats.iloc[i]
+                                # N個上の実績（戻りなので上方向）
+                                prev_idx = i - span_n if i - span_n >= 0 else 0
+                                target_prev = stats.iloc[prev_idx]
+                                
+                                x_path.append(curr['min'])
+                                y_path.append(curr['入数'])
+                                x_path.append(curr['min'])
+                                y_path.append(target_prev['入数'])
 
                             fig.add_trace(go.Scatter(
-                                x=x_coords, y=y_coords,
+                                x=x_path, y=y_path,
                                 fill='toself', 
                                 fillcolor=color_map[box_type],
                                 mode='lines',
@@ -130,7 +151,6 @@ def main():
                                 hoverinfo='name'
                             ))
                         else:
-                            # 点表示モード（ホバー情報あり）
                             fig.add_trace(go.Scatter(
                                 x=group["単一体積"], y=group["入数"],
                                 mode='markers',
@@ -140,7 +160,7 @@ def main():
                                 hovertemplate="<b>%{text}</b><br>単一体積: %{x:.3f}<br>入数: %{y}<extra></extra>"
                             ))
 
-                # --- 3. ターゲット（星）の描画 ---
+                # ターゲット描画
                 if i_weight and i_sg and i_pcs:
                     try:
                         sim_unit_vol = float(i_weight) / float(i_sg)
