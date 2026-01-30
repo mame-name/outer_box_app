@@ -50,8 +50,8 @@ def main():
                 with c1: st.markdown(f"<div style='padding-top:8px;'>{label}</div>", unsafe_allow_html=True)
                 with c2: return st.text_input(label, value="", placeholder=placeholder_text, label_visibility="collapsed")
 
-            i_weight = input_row("　重量/個", "単位：kg")
-            i_pcs = input_row("　入数", "単位：個")
+            i_weight = input_row("　重量/個", "kg")
+            i_pcs = input_row("　入数", "個")
             i_sg = input_row("　比重", "0.000")
             calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True)
 
