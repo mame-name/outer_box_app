@@ -60,18 +60,18 @@ def main():
             i_sg = input_row("　比重", "sg_val", "0.000")
             calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True)
             
-            # クリアボタンの処理
-            if st.button("入力内容をクリア", use_container_width=True):
-                st.session_state.weight_val = ""
-                st.session_state.pcs_val = ""
-                st.session_state.sg_val = ""
-                st.rerun()
-            
-            # フォーム送信時に値をセッションに保存（リロード対策）
             if calc_submit:
                 st.session_state.weight_val = i_weight
                 st.session_state.pcs_val = i_pcs
                 st.session_state.sg_val = i_sg
+                st.rerun()
+
+        # プロットボタン（フォーム）のすぐ下に配置
+        if st.button("入力内容をクリア", use_container_width=True):
+            st.session_state.weight_val = ""
+            st.session_state.pcs_val = ""
+            st.session_state.sg_val = ""
+            st.rerun()
 
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 外箱サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>まるで熊谷さんが考えたような精度で外箱を確認してくれるアプリです</p>", unsafe_allow_html=True)
@@ -153,9 +153,10 @@ def main():
                             ))
 
                 # ターゲット表示
-                if i_weight and i_sg and i_pcs:
+                if st.session_state.weight_val and st.session_state.pcs_val and st.session_state.sg_val:
                     try:
-                        sv, sp = float(i_weight) / float(i_sg), float(i_pcs)
+                        sv = float(st.session_state.weight_val) / float(st.session_state.sg_val)
+                        sp = float(st.session_state.pcs_val)
                         fig.add_trace(go.Scatter(
                             x=[sv], y=[sp], mode='markers',
                             marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', line=dict(width=2, color='white')),
