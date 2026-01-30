@@ -29,10 +29,9 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 def main():
-    # 入力値を管理するセッション状態の初期化
-    if "weight_val" not in st.session_state: st.session_state.weight_val = ""
-    if "pcs_val" not in st.session_state: st.session_state.pcs_val = ""
-    if "sg_val" not in st.session_state: st.session_state.sg_val = ""
+    # フォームを丸ごとリセットするためのカウンター
+    if "form_reset_key" not in st.session_state:
+        st.session_state.form_reset_key = 0
 
     with st.sidebar:
         st.subheader("📁 実績データ読込")
@@ -49,33 +48,21 @@ def main():
             i_type = st.selectbox("形態", type_list, index=None, placeholder="選択してください", label_visibility="collapsed")
 
         st.subheader("📝 2. 条件設定")
-        with st.form("sim_form"):
-            def input_row(label, key, placeholder_text=""):
+        # フォームに一意のKey（form_reset_key）を付与。クリア時にこれを加算して別フォームとして認識させる
+        with st.form(key=f"sim_form_{st.session_state.form_reset_key}"):
+            def input_row(label, placeholder_text=""):
                 c1, c2 = st.columns([1, 2])
                 with c1: st.markdown(f"<div style='padding-top:8px;'>{label}</div>", unsafe_allow_html=True)
-                # valueにsession_stateを入れる
-                with c2: return st.text_input(label, value=st.session_state[key], placeholder=placeholder_text, label_visibility="collapsed", key=f"input_{key}")
+                with c2: return st.text_input(label, value="", placeholder=placeholder_text, label_visibility="collapsed")
 
-            i_weight = input_row("　重量/個", "weight_val", "kg")
-            i_pcs = input_row("　入数", "pcs_val", "個")
-            i_sg = input_row("　比重", "sg_val", "0.000")
+            i_weight = input_row("　重量/個", "kg")
+            i_pcs = input_row("　入数", "個")
+            i_sg = input_row("　比重", "0.000")
             calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True, type="primary")
-            
-            if calc_submit:
-                st.session_state.weight_val = i_weight
-                st.session_state.pcs_val = i_pcs
-                st.session_state.sg_val = i_sg
-                st.rerun()
 
-        # プロットボタン（フォーム）のすぐ下に配置
+        # プロットボタンの下に配置
         if st.button("入力内容をクリア", use_container_width=True):
-            # 保持用の変数と、入力欄自体のWidget keyの両方をリセット
-            st.session_state.weight_val = ""
-            st.session_state.pcs_val = ""
-            st.session_state.sg_val = ""
-            if "input_weight_val" in st.session_state: st.session_state.input_weight_val = ""
-            if "input_pcs_val" in st.session_state: st.session_state.input_pcs_val = ""
-            if "input_sg_val" in st.session_state: st.session_state.input_sg_val = ""
+            st.session_state.form_reset_key += 1
             st.rerun()
 
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 外箱サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
@@ -158,10 +145,10 @@ def main():
                             ))
 
                 # ターゲット表示
-                if st.session_state.weight_val and st.session_state.pcs_val and st.session_state.sg_val:
+                if i_weight and i_sg and i_pcs:
                     try:
-                        sv = float(st.session_state.weight_val) / float(st.session_state.sg_val)
-                        sp = float(st.session_state.pcs_val)
+                        sv = float(i_weight) / float(i_sg)
+                        sp = float(i_pcs)
                         fig.add_trace(go.Scatter(
                             x=[sv], y=[sp], mode='markers',
                             marker=dict(symbol='star', size=SIM_MARKER_SIZE, color='red', line=dict(width=2, color='white')),
