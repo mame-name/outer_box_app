@@ -45,8 +45,8 @@ def main():
         c1, c2 = st.columns([1, 2])
         with c1: st.markdown("<div style='padding-top:8px;'>　形態</div>", unsafe_allow_html=True)
         with c2:
-            type_list = ["小袋", "パウチ", "BIB", "スパウト"]
-            i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
+            type_list = ["パウチ", "BIB", "小袋", "スパウト"]
+            i_type = st.selectbox("形態", type_list, index=None, placeholder="選択してください", label_visibility="collapsed")
 
         st.subheader("📝 2. 条件設定")
         with st.form("sim_form"):
