@@ -34,7 +34,7 @@ def main():
         uploaded_file = st.file_uploader("実績XLSMを選択", type=['xlsm'], label_visibility="collapsed")
 
         st.subheader("📊 表示設定")
-        plot_mode = st.radio("表示パターン", ["実績を囲む（エリア）", "全てのプロット（点）"], index=0)
+        plot_mode = st.radio("表示パターン", ["範囲で確認", "プロットで確認"], index=0)
 
         st.subheader("🔍 1. 形態選択")
         c1, c2 = st.columns([1, 2])
