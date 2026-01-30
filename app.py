@@ -60,6 +60,8 @@ def main():
             calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True)
 
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 外箱サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray;'>まるで熊谷さんが考えたような精度で外箱を確認してくれるアプリです</p>", unsafe_allow_html=True)
+    st.markdown("---")
     st.divider()
 
     if uploaded_file:
