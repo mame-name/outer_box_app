@@ -29,6 +29,11 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 def main():
+    # 入力値を管理するセッション状態の初期化
+    if "weight_val" not in st.session_state: st.session_state.weight_val = ""
+    if "pcs_val" not in st.session_state: st.session_state.pcs_val = ""
+    if "sg_val" not in st.session_state: st.session_state.sg_val = ""
+
     with st.sidebar:
         st.subheader("📁 実績データ読込")
         uploaded_file = st.file_uploader("実績XLSMを選択", type=['xlsm'], label_visibility="collapsed")
@@ -44,16 +49,29 @@ def main():
             i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
 
         st.subheader("📝 2. 条件設定")
+        # クリアボタンの処理
+        if st.button("入力内容をクリア", use_container_width=True):
+            st.session_state.weight_val = ""
+            st.session_state.pcs_val = ""
+            st.session_state.sg_val = ""
+            st.rerun()
+
         with st.form("sim_form"):
-            def input_row(label, placeholder_text=""):
+            def input_row(label, key, placeholder_text=""):
                 c1, c2 = st.columns([1, 2])
                 with c1: st.markdown(f"<div style='padding-top:8px;'>{label}</div>", unsafe_allow_html=True)
-                with c2: return st.text_input(label, value="", placeholder=placeholder_text, label_visibility="collapsed")
+                with c2: return st.text_input(label, value=st.session_state[key], placeholder=placeholder_text, label_visibility="collapsed", key=f"input_{key}")
 
-            i_weight = input_row("　重量/個", "kg")
-            i_pcs = input_row("　入数", "個")
-            i_sg = input_row("　比重", "0.000")
+            i_weight = input_row("　重量/個", "weight_val", "kg")
+            i_pcs = input_row("　入数", "pcs_val", "個")
+            i_sg = input_row("　比重", "sg_val", "0.000")
             calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True)
+            
+            # フォーム送信時に値をセッションに保存（リロード対策）
+            if calc_submit:
+                st.session_state.weight_val = i_weight
+                st.session_state.pcs_val = i_pcs
+                st.session_state.sg_val = i_sg
 
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 外箱サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>まるで熊谷さんが考えたような精度で外箱を確認してくれるアプリです</p>", unsafe_allow_html=True)
@@ -94,7 +112,7 @@ def main():
                 color_map = {box: colors[i % len(colors)] for i, box in enumerate(available_boxes)}
 
                 if not plot_data.empty:
-                    if plot_mode == "実績を囲む（エリア）":
+                    if plot_mode == "範囲で確認":
                         for box_type in selected_boxes:
                             group = plot_data[plot_data["外箱"] == box_type]
                             if len(group) < 1: continue
@@ -107,11 +125,8 @@ def main():
 
                             for i in range(len(stats)):
                                 p_curr = stats.iloc[i]
-                                # 【変更点】1個下（dist=1）とのみ接続
                                 if i + 1 < len(stats):
                                     p_target = stats.iloc[i + 1]
-                                    
-                                    # 四角形を構築してNoneで区切り、同じトレース内で描画（濃淡防止）
                                     combined_x.extend([p_curr['min'], p_curr['max'], p_target['max'], p_target['min'], p_curr['min'], None])
                                     combined_y.extend([p_curr['入数'], p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入数'], None])
 
