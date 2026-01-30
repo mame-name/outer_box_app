@@ -49,13 +49,6 @@ def main():
             i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
 
         st.subheader("📝 2. 条件設定")
-        # クリアボタンの処理
-        if st.button("入力内容をクリア", use_container_width=True):
-            st.session_state.weight_val = ""
-            st.session_state.pcs_val = ""
-            st.session_state.sg_val = ""
-            st.rerun()
-
         with st.form("sim_form"):
             def input_row(label, key, placeholder_text=""):
                 c1, c2 = st.columns([1, 2])
@@ -66,6 +59,13 @@ def main():
             i_pcs = input_row("　入数", "pcs_val", "個")
             i_sg = input_row("　比重", "sg_val", "0.000")
             calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True)
+            
+            # クリアボタンの処理
+            if st.button("入力内容をクリア", use_container_width=True):
+                st.session_state.weight_val = ""
+                st.session_state.pcs_val = ""
+                st.session_state.sg_val = ""
+                st.rerun()
             
             # フォーム送信時に値をセッションに保存（リロード対策）
             if calc_submit:
