@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import numpy as np
 from calc import process_product_data
 
-st.set_page_config(layout="wide", page_title="小袋サイズ適正化アプリ")
+st.set_page_config(layout="wide", page_title="外箱サイズ確認アプリ")
 
 # ==========================================
 # グラフの表示詳細設定
