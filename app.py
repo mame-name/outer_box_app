@@ -53,6 +53,7 @@ def main():
             def input_row(label, key, placeholder_text=""):
                 c1, c2 = st.columns([1, 2])
                 with c1: st.markdown(f"<div style='padding-top:8px;'>{label}</div>", unsafe_allow_html=True)
+                # valueにsession_stateを入れる
                 with c2: return st.text_input(label, value=st.session_state[key], placeholder=placeholder_text, label_visibility="collapsed", key=f"input_{key}")
 
             i_weight = input_row("　重量/個", "weight_val", "kg")
@@ -68,9 +69,13 @@ def main():
 
         # プロットボタン（フォーム）のすぐ下に配置
         if st.button("入力内容をクリア", use_container_width=True):
+            # 保持用の変数と、入力欄自体のWidget keyの両方をリセット
             st.session_state.weight_val = ""
             st.session_state.pcs_val = ""
             st.session_state.sg_val = ""
+            if "input_weight_val" in st.session_state: st.session_state.input_weight_val = ""
+            if "input_pcs_val" in st.session_state: st.session_state.input_pcs_val = ""
+            if "input_sg_val" in st.session_state: st.session_state.input_sg_val = ""
             st.rerun()
 
     st.markdown("<h1 style='text-align: center;'>Intelligent 熊谷さん<br>🤖 🤖 🤖 外箱サイズ確認 🤖 🤖 🤖</h1>", unsafe_allow_html=True)
@@ -128,7 +133,7 @@ def main():
                                 if i + 1 < len(stats):
                                     p_target = stats.iloc[i + 1]
                                     combined_x.extend([p_curr['min'], p_curr['max'], p_target['max'], p_target['min'], p_curr['min'], None])
-                                    combined_y.extend([p_curr['入数'], p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入数'], None])
+                                    combined_y.extend([p_curr['入数'], p_curr['入数'], p_target['入数'], p_target['入数'], p_curr['入_数'], None])
 
                             fig.add_trace(go.Scatter(
                                 x=combined_x, y=combined_y,
