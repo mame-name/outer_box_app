@@ -58,7 +58,7 @@ def main():
             i_weight = input_row("　重量/個", "weight_val", "kg")
             i_pcs = input_row("　入数", "pcs_val", "個")
             i_sg = input_row("　比重", "sg_val", "0.000")
-            calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True)
+            calc_submit = st.form_submit_button("グラフにプロット", use_container_width=True, type="primary")
             
             if calc_submit:
                 st.session_state.weight_val = i_weight
