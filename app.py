@@ -32,11 +32,9 @@ def main():
     with st.sidebar:
         st.subheader("📁 実績データ読込")
         uploaded_file = st.file_uploader("実績XLSMを選択", type=['xlsm'], label_visibility="collapsed")
-        st.divider()
 
         st.subheader("📊 表示設定")
         plot_mode = st.radio("表示パターン", ["実績を囲む（エリア）", "全てのプロット（点）"], index=0)
-        st.divider()
 
         st.subheader("🔍 1. 形態選択")
         c1, c2 = st.columns([1, 2])
@@ -44,8 +42,6 @@ def main():
         with c2:
             type_list = ["小袋", "パウチ", "BIB", "スパウト"]
             i_type = st.selectbox("形態", type_list, label_visibility="collapsed")
-        
-        st.divider()
 
         st.subheader("📝 2. 条件設定")
         with st.form("sim_form"):
